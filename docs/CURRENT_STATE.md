@@ -43,15 +43,23 @@
 - World Map editing: Create Node, relation editing, reparenting.
 - Node chats and persistence.
 - Create World flow.
-- Backend, authentication or API integration.
 - OpenAI integration.
+- Authentication.
+
+### Stage A — Database Foundation (completed)
+
+- Supabase migration in `supabase/migrations/20260322000000_initial_schema.sql`: extensions, enums, tables (`worlds`, `nodes`, `node_relations`, `conversations`, `messages`, `ai_runs`, `branch_suggestions`), constraints, indexes, and RPCs `create_world_with_root` + `approve_branch_suggestion`.
+- Server-only database layer in `src/lib/db/` (Supabase client, RPC wrappers, row-to-`WorldGraph` adapter) and typed models in `src/types/db.ts`.
+- Zod validation schemas in `src/lib/validation/schemas.ts` for Stage A inputs and persisted suggestion payloads.
+- Vitest foundation with unit tests for schemas and the map adapter (no live database required).
+- `.env.example` documents `SUPABASE_URL` and `SUPABASE_SECRET_KEY` (plus future OpenAI vars).
+- Existing Universe Home and World Map screens still use mock data.
 
 ## Latest Update
 
-- World Map supports hierarchy plus per-relation floating subgraph views with independent layouts.
-- Marquee box selection for moving multiple nodes together; details panel opens only for a single selected node.
-- Lint passes.
+- Stage A database foundation implemented: schema migration, atomic RPCs, server-only DB layer, validation schemas, and focused unit tests.
+- Lint, test, and build pass.
 
 ## Next Task
 
-Wire the World Map to real data and enable node creation and relation editing when backend work begins.
+Stage B — Persistent Worlds and DB-backed World Map: wire `createWorld`, switch `/worlds/[worldId]` to database reads, and keep the existing map UI contract via the adapter.
