@@ -11,6 +11,7 @@
 - @xyflow/react installed.
 - Development server runs successfully.
 - **Static Universe Home at `/` implemented and visually refined.**
+- **Static World Map at `/worlds/[worldId]` implemented with @xyflow/react.**
 
 ## Current Application State
 
@@ -25,35 +26,32 @@
 - Basic desktop-first responsiveness: sidebar hidden below `md`, overview panel hidden below `xl`, responsive world grid.
 - Typography and spacing scaled up for desktop; premium depth via surface cards, inset backgrounds and restrained glow.
 
+### World Map (`/worlds/[worldId]`)
+
+- Server route in `src/app/worlds/[worldId]/page.tsx` reusing the shared `AppShell`; resolves the world from mock data and returns `notFound()` for unknown ids.
+- Typed graph model in `src/types/world-map.ts` and mock graph in `src/data/mock-world-map.ts` (root, four branches, six children plus secondary relations). Manual node positions.
+- Interactive canvas via `@xyflow/react` (`WorldMapView`): pan, zoom, fit-view, single- and multi-node selection (marquee box + Ctrl/Cmd+click), and draggable nodes (group drag when multiple selected); nodes are non-connectable.
+- Custom `WorldNode` with root/branch/child variants; root uses a hero-style orb core.
+- Primary hierarchy view plus dedicated floating relation graphs per secondary relation type (`dependency`, `shared-feature`, `shared-contract`, `reference`). Users switch views from the filter bar (Hierarchy button, “Open relation graph” in each filter popover, or double-click a relation chip).
+- Relation graphs show only participating nodes and that type’s links (network layout, not a tree). Each view keeps its own manual positions and reset-layout behavior.
+- Primary hierarchy edges (solid, arrowed) always visible in hierarchy view; secondary relation edges (dashed, color-coded) use per-type opacity sliders in hierarchy view.
+- Selecting a node highlights relevant connections and opens `NodeDetailsPanel` (goal, parent, children, linked nodes, key decisions, open questions, progress).
+- Themed React Flow controls and dotted background; details panel docks on wide screens and overlays below `xl`.
+
 ### Not Yet Implemented
 
-- World Map route (`/worlds/[worldId]`).
-- World Map interactions.
-- Create World and Create Node flows.
+- World Map editing: Create Node, relation editing, reparenting.
+- Node chats and persistence.
+- Create World flow.
 - Backend, authentication or API integration.
 - OpenAI integration.
 
-## Next Task
-
-Implement the static World Map at `/worlds/[worldId]` using the same application shell and mock data.
-
-The task should include:
-
-- Reuse shared shell components.
-- Static node graph layout with @xyflow/react.
-- Node details panel.
-- Relation filters (visual only).
-- Mock node and relation data.
-
-Do not add backend, auth or API calls during this task.
-
 ## Latest Update
 
-- Universe Home static frontend is implemented and visually approved.
-- The Hero asset and responsive composition are accepted for the current stage.
-- The shared application shell, sidebar, header, World cards and overview panel are complete.
-- Lint and production build pass.
+- World Map supports hierarchy plus per-relation floating subgraph views with independent layouts.
+- Marquee box selection for moving multiple nodes together; details panel opens only for a single selected node.
+- Lint passes.
 
 ## Next Task
 
-Plan and implement the static World Map route at `/worlds/[worldId]`.
+Wire the World Map to real data and enable node creation and relation editing when backend work begins.
