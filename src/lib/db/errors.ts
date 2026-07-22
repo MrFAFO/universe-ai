@@ -10,3 +10,6 @@ export const PUBLIC_DATABASE_ERROR_MESSAGE =
 
 export const PUBLIC_CREATE_WORLD_ERROR_MESSAGE =
   "Unable to create world. Please try again.";
+
+export const PUBLIC_CHAT_ERROR_MESSAGE =
+  "Unable to process the chat request. Please try again.";
