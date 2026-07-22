@@ -11,6 +11,20 @@ export const worldIdParamSchema = z.uuid();
 
 export type WorldIdParam = z.infer<typeof worldIdParamSchema>;
 
+export const conversationIdParamSchema = z.uuid();
+
+export type ConversationIdParam = z.infer<typeof conversationIdParamSchema>;
+
+export const nodeIdParamSchema = z.uuid();
+
+export type NodeIdParam = z.infer<typeof nodeIdParamSchema>;
+
+export const sendMessageInputSchema = z.object({
+  content: z.string().trim().min(1).max(10_000),
+});
+
+export type SendMessageInput = z.infer<typeof sendMessageInputSchema>;
+
 export const approveSuggestionInputSchema = z.object({
   suggestionId: z.uuid(),
 });

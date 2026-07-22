@@ -3,8 +3,11 @@ import {
   approveBranchSuggestionResultSchema,
   approveSuggestionInputSchema,
   branchSuggestionPayloadSchema,
+  conversationIdParamSchema,
   createWorldInputSchema,
   createWorldWithRootResultSchema,
+  nodeIdParamSchema,
+  sendMessageInputSchema,
   worldIdParamSchema,
 } from "@/lib/validation/schemas";
 
@@ -39,6 +42,44 @@ describe("worldIdParamSchema", () => {
 
   it("rejects non-uuid ids", () => {
     expect(() => worldIdParamSchema.parse("universe-ai")).toThrow();
+  });
+});
+
+describe("conversationIdParamSchema", () => {
+  it("accepts a UUID conversation id", () => {
+    expect(conversationIdParamSchema.parse(conversationId)).toBe(conversationId);
+  });
+
+  it("rejects non-uuid ids", () => {
+    expect(() => conversationIdParamSchema.parse("conversation-1")).toThrow();
+  });
+});
+
+describe("nodeIdParamSchema", () => {
+  it("accepts a UUID node id", () => {
+    expect(nodeIdParamSchema.parse(nodeId)).toBe(nodeId);
+  });
+
+  it("rejects non-uuid ids", () => {
+    expect(() => nodeIdParamSchema.parse("root")).toThrow();
+  });
+});
+
+describe("sendMessageInputSchema", () => {
+  it("accepts trimmed message content", () => {
+    const result = sendMessageInputSchema.parse({ content: "  Hello world  " });
+    expect(result.content).toBe("Hello world");
+  });
+
+  it("rejects empty and whitespace-only content", () => {
+    expect(() => sendMessageInputSchema.parse({ content: "" })).toThrow();
+    expect(() => sendMessageInputSchema.parse({ content: "   " })).toThrow();
+  });
+
+  it("rejects content over 10,000 characters", () => {
+    expect(() =>
+      sendMessageInputSchema.parse({ content: "a".repeat(10_001) }),
+    ).toThrow();
   });
 });
 
