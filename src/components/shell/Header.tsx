@@ -1,4 +1,5 @@
-import { Bell, Plus, Search } from "lucide-react";
+import { Bell, Search } from "lucide-react";
+import { CreateWorldButton } from "@/components/universe/CreateWorldButton";
 
 export function Header() {
   return (
@@ -17,13 +18,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          className="hidden items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-[15px] font-medium text-white transition-colors hover:bg-accent/90 sm:flex"
-        >
-          <Plus className="size-[18px]" strokeWidth={2} />
-          New World
-        </button>
+        <CreateWorldButton variant="header" />
         <button
           type="button"
           className="flex size-11 items-center justify-center rounded-lg border border-border bg-surface-elevated text-text-secondary shadow-[var(--inner-glow)] transition-colors hover:border-border-strong hover:text-text-primary"

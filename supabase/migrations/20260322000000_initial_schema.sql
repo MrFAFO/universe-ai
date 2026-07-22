@@ -226,14 +226,14 @@ declare
   v_root_id uuid;
   v_conversation_id uuid;
 begin
-  if p_name is null or pg_catalog.char_length(pg_catalog.trim(p_name)) = 0 then
+  if p_name is null or pg_catalog.char_length(pg_catalog.btrim(p_name)) = 0 then
     raise exception 'World name is required';
   end if;
 
   insert into public.worlds (name, description, status)
   values (
-    pg_catalog.trim(p_name),
-    pg_catalog.coalesce(p_description, ''),
+    pg_catalog.btrim(p_name),
+    coalesce(p_description, ''),
     'planning'::public.world_status
   )
   returning id into v_world_id;
@@ -324,7 +324,7 @@ begin
     return pg_catalog.jsonb_build_object(
       'suggestion_id', v_suggestion.id,
       'status', 'approved',
-      'created_node_ids', pg_catalog.coalesce(v_suggestion.created_node_ids, '[]'::jsonb),
+      'created_node_ids', coalesce(v_suggestion.created_node_ids, '[]'::jsonb),
       'idempotent', true
     );
   end if;
@@ -372,12 +372,12 @@ begin
       v_suggestion.world_id,
       v_suggestion.parent_node_id,
       'topic'::public.node_kind,
-      pg_catalog.coalesce(
-        pg_catalog.nullif(pg_catalog.trim(v_node ->> 'title'), ''),
+      coalesce(
+        nullif(pg_catalog.btrim(v_node ->> 'title'), ''),
         'Untitled'
       ),
-      pg_catalog.coalesce(v_node ->> 'description', ''),
-      pg_catalog.coalesce(v_node ->> 'goal', ''),
+      coalesce(v_node ->> 'description', ''),
+      coalesce(v_node ->> 'goal', ''),
       'planning'::public.world_status,
       0,
       v_parent.position_x + (v_index - ((v_count - 1)::float / 2.0)) * 280,

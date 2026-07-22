@@ -7,6 +7,10 @@ export const createWorldInputSchema = z.object({
 
 export type CreateWorldInput = z.infer<typeof createWorldInputSchema>;
 
+export const worldIdParamSchema = z.uuid();
+
+export type WorldIdParam = z.infer<typeof worldIdParamSchema>;
+
 export const approveSuggestionInputSchema = z.object({
   suggestionId: z.uuid(),
 });

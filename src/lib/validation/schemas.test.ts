@@ -5,6 +5,7 @@ import {
   branchSuggestionPayloadSchema,
   createWorldInputSchema,
   createWorldWithRootResultSchema,
+  worldIdParamSchema,
 } from "@/lib/validation/schemas";
 
 const suggestionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -28,6 +29,16 @@ describe("approveSuggestionInputSchema", () => {
   it("accepts a suggestion id", () => {
     const result = approveSuggestionInputSchema.parse({ suggestionId });
     expect(result.suggestionId).toBe(suggestionId);
+  });
+});
+
+describe("worldIdParamSchema", () => {
+  it("accepts a UUID world id", () => {
+    expect(worldIdParamSchema.parse(worldId)).toBe(worldId);
+  });
+
+  it("rejects non-uuid ids", () => {
+    expect(() => worldIdParamSchema.parse("universe-ai")).toThrow();
   });
 });
 

@@ -3,10 +3,10 @@ import {
   LayoutGrid,
   Map,
   Orbit,
-  Plus,
   Settings,
 } from "lucide-react";
 import Link from "next/link";
+import { CreateWorldButton } from "@/components/universe/CreateWorldButton";
 
 const navItems = [
   { label: "Universe", href: "/", icon: Orbit, active: true },
@@ -49,13 +49,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-border p-4">
-        <button
-          type="button"
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-strong bg-surface-elevated px-3.5 py-2.5 text-sm font-medium text-text-secondary shadow-[var(--inner-glow)] transition-colors hover:border-accent/25 hover:text-text-primary"
-        >
-          <Plus className="size-4" strokeWidth={1.75} />
-          New World
-        </button>
+        <CreateWorldButton variant="sidebar" />
       </div>
     </aside>
   );

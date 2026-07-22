@@ -20,15 +20,15 @@
 - Shared application shell with fixed left sidebar, top header and scrollable main area.
 - Design tokens defined as CSS variables in `globals.css` (dark navy foundation, blue/violet accents, depth shadows and inner glow utilities).
 - Living-universe hero with full-width intelligence network visualization — layered orbital rings, central core, connected nodes and restrained ambient animation.
-- Typed mock World data in `src/data/mock-universe.ts`.
-- Reusable `WorldCard` components with per-world SVG thumbnails (`WorldThumbnail`), improved hierarchy and hover depth; linking to `/worlds/[worldId]` (route not yet implemented).
+- Typed World data loaded from Supabase on the server.
+- Reusable `WorldCard` components with per-world SVG thumbnails (`WorldThumbnail`), improved hierarchy and hover depth; linking to `/worlds/[worldId]`.
 - Right overview panel with card-based surfaces for Recent Activity, Universe Overview and Model (visible at `xl` breakpoint).
 - Basic desktop-first responsiveness: sidebar hidden below `md`, overview panel hidden below `xl`, responsive world grid.
 - Typography and spacing scaled up for desktop; premium depth via surface cards, inset backgrounds and restrained glow.
 
 ### World Map (`/worlds/[worldId]`)
 
-- Server route in `src/app/worlds/[worldId]/page.tsx` reusing the shared `AppShell`; resolves the world from mock data and returns `notFound()` for unknown ids.
+- Server route in `src/app/worlds/[worldId]/page.tsx` reusing the shared `AppShell`; loads world graph from Supabase by UUID and returns `notFound()` for invalid or missing ids.
 - Typed graph model in `src/types/world-map.ts` and mock graph in `src/data/mock-world-map.ts` (root, four branches, six children plus secondary relations). Manual node positions.
 - Interactive canvas via `@xyflow/react` (`WorldMapView`): pan, zoom, fit-view, single- and multi-node selection (marquee box + Ctrl/Cmd+click), and draggable nodes (group drag when multiple selected); nodes are non-connectable.
 - Custom `WorldNode` with root/branch/child variants; root uses a hero-style orb core.
@@ -38,11 +38,20 @@
 - Selecting a node highlights relevant connections and opens `NodeDetailsPanel` (goal, parent, children, linked nodes, key decisions, open questions, progress).
 - Themed React Flow controls and dotted background; details panel docks on wide screens and overlays below `xl`.
 
+### Stage B — Persistent Worlds and DB-backed World Map (completed)
+
+- Persistent world queries in `src/lib/db/worlds.ts`: list worlds (ordered by `updated_at`), load world graph with nodes and secondary relations by UUID.
+- `mapDbWorldToWorld` adapts database rows to the existing `World` card contract with neutral defaults for unstored metrics.
+- `createWorldAction` server action validates input, calls `create_world_with_root`, revalidates `/`, and redirects to the new world map.
+- Functional Create World dialog wired to Header, Sidebar and empty-state actions (`CreateWorldProvider`, `CreateWorldDialog`, `CreateWorldButton`).
+- Universe Home loads persisted worlds from Supabase on the server; overview totals derive from stored data; restrained database error state on failure.
+- `/worlds/[worldId]` loads the graph from Supabase (UUID-only), returns `notFound()` for missing/invalid ids, and preserves the existing React Flow UI.
+- Mock universe/world-map files retained for development reference; production routes no longer depend on them.
+
 ### Not Yet Implemented
 
 - World Map editing: Create Node, relation editing, reparenting.
 - Node chats and persistence.
-- Create World flow.
 - OpenAI integration.
 - Authentication.
 
@@ -53,13 +62,16 @@
 - Zod validation schemas in `src/lib/validation/schemas.ts` for Stage A inputs and persisted suggestion payloads.
 - Vitest foundation with unit tests for schemas and the map adapter (no live database required).
 - `.env.example` documents `SUPABASE_URL` and `SUPABASE_SECRET_KEY` (plus future OpenAI vars).
-- Existing Universe Home and World Map screens still use mock data.
+- Production Universe Home and World Map routes use persisted Supabase data; mock files remain only as development reference.
 
 ## Latest Update
 
-- Stage A database foundation implemented: schema migration, atomic RPCs, server-only DB layer, validation schemas, and focused unit tests.
-- Lint, test, and build pass.
+- Stage B implemented: persistent worlds, Create World flow, and DB-backed World Map route.
+- Create World failure was traced to invalid qualified SQL calls (`pg_catalog.trim`, `pg_catalog.coalesce`, and `pg_catalog.nullif`) inside the RPC definitions.
+- RPC definitions were corrected to use `pg_catalog.btrim`, `coalesce`, and `nullif`, and the remote Supabase functions were updated successfully.
+- Manual acceptance test passed: creating a World persists it and redirects to its DB-backed World Map with the Root Planning Node.
+- Validation complete: lint passes with one pre-existing `<img>` warning, all 14 tests pass, and the production build succeeds.
 
 ## Next Task
 
-Stage B — Persistent Worlds and DB-backed World Map: wire `createWorld`, switch `/worlds/[worldId]` to database reads, and keep the existing map UI contract via the adapter.
+Stage C — Root Planning Chat and OpenAI streaming.
