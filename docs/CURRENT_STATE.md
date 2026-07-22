@@ -51,8 +51,7 @@
 ### Not Yet Implemented
 
 - World Map editing: Create Node, relation editing, reparenting.
-- Node chats and persistence.
-- OpenAI integration.
+- Planning and execution chats for non-root nodes.
 - Authentication.
 
 ### Stage A — Database Foundation (completed)
@@ -66,12 +65,17 @@
 
 ## Latest Update
 
-- Stage B implemented: persistent worlds, Create World flow, and DB-backed World Map route.
-- Create World failure was traced to invalid qualified SQL calls (`pg_catalog.trim`, `pg_catalog.coalesce`, and `pg_catalog.nullif`) inside the RPC definitions.
-- RPC definitions were corrected to use `pg_catalog.btrim`, `coalesce`, and `nullif`, and the remote Supabase functions were updated successfully.
-- Manual acceptance test passed: creating a World persists it and redirects to its DB-backed World Map with the Root Planning Node.
-- Validation complete: lint passes with one pre-existing `<img>` warning, all 14 tests pass, and the production build succeeds.
+- Stage C implemented: dedicated Root Planning Chat at `/worlds/[worldId]/nodes/[nodeId]`.
+- The Root node details panel links directly to its Planning Chat.
+- Existing Root Planning conversation history loads from Supabase in ordinal order.
+- User messages are persisted before the OpenAI request begins.
+- Assistant text streams progressively through the OpenAI Responses API using an NDJSON protocol.
+- Completed assistant messages and `ai_runs` lifecycle data are persisted in Supabase.
+- Failed, interrupted, or cancelled streams do not persist partial assistant messages and do not leave the client permanently stuck.
+- Supabase remains the authoritative conversation history; the OpenAI API key and model configuration remain server-only.
+- Manual acceptance passed: progressive streaming, persistence after refresh, history reload after reopening, and no server errors.
+- Validation complete: all 57 tests pass, lint passes with one pre-existing `<img>` warning, and the production build succeeds.
 
 ## Next Task
 
-Stage C — Root Planning Chat and OpenAI streaming.
+Define and approve the scope and acceptance criteria for Stage D before implementation. The existing schema supports branch suggestions as a possible next milestone, but this has not yet been selected.

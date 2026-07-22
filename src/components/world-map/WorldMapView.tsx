@@ -507,6 +507,7 @@ export function WorldMapView({ world, graph }: WorldMapViewProps) {
       {selectedNode && (
         <div className="world-map__details">
           <NodeDetailsPanel
+            worldId={world.id}
             node={selectedNode}
             parent={parentNode}
             childNodes={childNodes}

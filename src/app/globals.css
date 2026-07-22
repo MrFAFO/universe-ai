@@ -1587,3 +1587,293 @@ body {
   }
 }
 
+.node-details__open--active {
+  opacity: 1;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.node-details__open--active:hover {
+  background: #2563eb;
+  box-shadow: 0 0 24px rgba(59, 130, 246, 0.22);
+}
+
+/* Root planning chat */
+.root-planning-chat-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: calc(100vh - var(--header-height));
+  padding: clamp(1.25rem, 2.5vw, 2rem) clamp(1.25rem, 3vw, 2.5rem);
+}
+
+.root-planning-chat-page--error {
+  align-items: center;
+  justify-content: center;
+}
+
+.root-planning-chat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  max-width: 52rem;
+  width: 100%;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(
+    180deg,
+    rgba(21, 31, 53, 0.92) 0%,
+    rgba(15, 22, 41, 0.96) 100%
+  );
+  box-shadow: var(--shadow-soft), var(--shadow-glow);
+  overflow: hidden;
+}
+
+.root-planning-chat__header {
+  flex-shrink: 0;
+  padding: 1.25rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(15, 22, 41, 0.55);
+}
+
+.root-planning-chat__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.root-planning-chat__back:hover {
+  color: var(--text-primary);
+}
+
+.root-planning-chat__heading {
+  margin-top: 0.85rem;
+}
+
+.root-planning-chat__eyebrow {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.root-planning-chat__title {
+  margin-top: 0.25rem;
+  font-size: clamp(1.35rem, 2vw, 1.65rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.root-planning-chat__subtitle {
+  margin-top: 0.2rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.root-planning-chat__messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.root-planning-chat__empty {
+  margin: auto;
+  max-width: 28rem;
+  text-align: center;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.root-planning-chat__message {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 92%;
+}
+
+.root-planning-chat__message--user {
+  margin-left: auto;
+}
+
+.root-planning-chat__message--assistant {
+  margin-right: auto;
+}
+
+.root-planning-chat__message-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.root-planning-chat__message--user .root-planning-chat__message-label {
+  text-align: right;
+}
+
+.root-planning-chat__message-body {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  padding: 0.85rem 1rem;
+  background: var(--surface-elevated);
+  box-shadow: var(--inner-glow);
+}
+
+.root-planning-chat__message--user .root-planning-chat__message-body {
+  border-color: rgba(59, 130, 246, 0.22);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.root-planning-chat__message--assistant .root-planning-chat__message-body {
+  border-color: rgba(124, 58, 237, 0.18);
+  background: rgba(124, 58, 237, 0.08);
+}
+
+.root-planning-chat__message--failed .root-planning-chat__message-body {
+  border-color: rgba(234, 179, 8, 0.28);
+}
+
+.root-planning-chat__message-text {
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.root-planning-chat__message-placeholder {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.root-planning-chat__message-error {
+  font-size: 0.8125rem;
+  color: #fbbf24;
+}
+
+.root-planning-chat__streaming {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.root-planning-chat__composer {
+  flex-shrink: 0;
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem 1.25rem;
+  border-top: 1px solid var(--border);
+  background: rgba(12, 18, 32, 0.72);
+}
+
+.root-planning-chat__request-error {
+  font-size: 0.8125rem;
+  color: #fbbf24;
+}
+
+.root-planning-chat__textarea {
+  width: 100%;
+  min-height: 6.5rem;
+  resize: vertical;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  color: var(--text-primary);
+  padding: 0.85rem 1rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.root-planning-chat__textarea:focus {
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.12);
+}
+
+.root-planning-chat__textarea:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.root-planning-chat__composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.root-planning-chat__composer-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.root-planning-chat__send {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 0;
+  border-radius: var(--radius-md);
+  padding: 0.65rem 1rem;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition:
+    background-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.root-planning-chat__send:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.root-planning-chat__send:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 767px) {
+  .root-planning-chat-page {
+    padding: 1rem;
+  }
+
+  .root-planning-chat__header,
+  .root-planning-chat__messages,
+  .root-planning-chat__composer {
+    padding-inline: 1rem;
+  }
+
+  .root-planning-chat__message {
+    max-width: 100%;
+  }
+
+  .root-planning-chat__composer-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .root-planning-chat__send {
+    justify-content: center;
+  }
+}
+

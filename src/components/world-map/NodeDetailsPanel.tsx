@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   ArrowUpRight,
   CircleHelp,
@@ -22,6 +23,7 @@ interface LinkedNodeRef {
 }
 
 interface NodeDetailsPanelProps {
+  worldId: string;
   node: WorldMapNode;
   parent: WorldMapNode | null;
   childNodes: WorldMapNode[];
@@ -31,6 +33,7 @@ interface NodeDetailsPanelProps {
 }
 
 export function NodeDetailsPanel({
+  worldId,
   node,
   parent,
   childNodes,
@@ -170,10 +173,20 @@ export function NodeDetailsPanel({
         </Section>
       </div>
 
-      <button type="button" className="node-details__open" disabled>
-        Open Node
-        <ArrowUpRight className="size-4" strokeWidth={1.75} />
-      </button>
+      {node.data.kind === "root" ? (
+        <Link
+          href={`/worlds/${worldId}/nodes/${node.id}`}
+          className="node-details__open node-details__open--active"
+        >
+          Open Planning Chat
+          <ArrowUpRight className="size-4" strokeWidth={1.75} />
+        </Link>
+      ) : (
+        <button type="button" className="node-details__open" disabled>
+          Open Node
+          <ArrowUpRight className="size-4" strokeWidth={1.75} />
+        </button>
+      )}
     </aside>
   );
 }
