@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   approveBranchSuggestionResultSchema,
   approveSuggestionInputSchema,
-  branchSuggestionPayloadSchema,
   conversationIdParamSchema,
   createWorldInputSchema,
   createWorldWithRootResultSchema,
@@ -79,31 +78,6 @@ describe("sendMessageInputSchema", () => {
   it("rejects content over 10,000 characters", () => {
     expect(() =>
       sendMessageInputSchema.parse({ content: "a".repeat(10_001) }),
-    ).toThrow();
-  });
-});
-
-describe("branchSuggestionPayloadSchema", () => {
-  it("accepts a valid suggestion payload", () => {
-    const result = branchSuggestionPayloadSchema.parse({
-      rationale: "Split the work into focused areas.",
-      nodes: [
-        {
-          title: "Context",
-          description: "Memory and context building",
-          goal: "Define context strategy",
-        },
-      ],
-    });
-
-    expect(result.nodes).toHaveLength(1);
-  });
-
-  it("rejects empty node lists", () => {
-    expect(() =>
-      branchSuggestionPayloadSchema.parse({
-        nodes: [],
-      }),
     ).toThrow();
   });
 });

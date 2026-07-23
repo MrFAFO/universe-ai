@@ -31,19 +31,6 @@ export const approveSuggestionInputSchema = z.object({
 
 export type ApproveSuggestionInput = z.infer<typeof approveSuggestionInputSchema>;
 
-export const suggestedNodeSchema = z.object({
-  title: z.string().trim().min(1).max(200),
-  description: z.string().trim().max(2000),
-  goal: z.string().trim().max(5000),
-});
-
-export const branchSuggestionPayloadSchema = z.object({
-  rationale: z.string().trim().max(5000).optional(),
-  nodes: z.array(suggestedNodeSchema).min(1).max(6),
-});
-
-export type BranchSuggestionPayload = z.infer<typeof branchSuggestionPayloadSchema>;
-
 export const createWorldWithRootResultSchema = z.object({
   world_id: z.uuid(),
   root_node_id: z.uuid(),
