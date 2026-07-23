@@ -47,6 +47,11 @@ function makeCompletedResponse(
     id: "resp_suggestion_123",
     status: "completed",
     output_parsed: validSuggestion,
+    usage: {
+      input_tokens: 42,
+      output_tokens: 17,
+      total_tokens: 59,
+    },
     output: [
       {
         id: "msg_1",
@@ -180,6 +185,30 @@ describe("generateBranchSuggestion", () => {
       ok: true,
       suggestion: validSuggestion,
       providerResponseId: "resp_suggestion_123",
+      inputTokens: 42,
+      outputTokens: 17,
+    });
+  });
+
+  it("returns null token counts when usage is unavailable", async () => {
+    const deps = createMockDeps({
+      parseStructuredResponse: vi.fn(async () =>
+        makeCompletedResponse({ usage: undefined }),
+      ),
+    });
+
+    const result = await generateBranchSuggestion(
+      [
+        makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
+        makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
+      ],
+      { deps },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      inputTokens: null,
+      outputTokens: null,
     });
   });
 

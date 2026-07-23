@@ -26,6 +26,8 @@ export type GenerateBranchSuggestionResult =
       ok: true;
       suggestion: BranchSuggestionV1;
       providerResponseId: string | null;
+      inputTokens: number | null;
+      outputTokens: number | null;
     }
   | {
       ok: false;
@@ -115,6 +117,8 @@ function interpretParsedResponse(
     ok: true,
     suggestion: parsed.suggestion,
     providerResponseId: typeof response.id === "string" ? response.id : null,
+    inputTokens: response.usage?.input_tokens ?? null,
+    outputTokens: response.usage?.output_tokens ?? null,
   };
 }
 

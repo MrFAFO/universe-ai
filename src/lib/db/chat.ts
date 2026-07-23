@@ -184,6 +184,9 @@ export async function insertAssistantMessage(
 export async function createAiRun(
   conversationId: string,
   model: string,
+  options?: {
+    metadata?: Record<string, unknown> | null;
+  },
 ): Promise<{ id: string }> {
   const supabase = createSupabaseServerClient();
   const { data, error } = await supabase
@@ -192,6 +195,7 @@ export async function createAiRun(
       conversation_id: conversationId,
       model,
       status: "running",
+      metadata: options?.metadata ?? null,
     })
     .select("id")
     .single();
