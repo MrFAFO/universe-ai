@@ -2,10 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BranchSuggestionV1 } from "@/lib/ai/branch-suggestion";
 import {
   BranchSuggestionPayloadError,
+  classifyBranchSuggestionPersistenceError,
   getBranchSuggestionById,
-  insertPendingBranchSuggestion,
   listPendingBranchSuggestionsForConversation,
   mapDbBranchSuggestionRow,
+  PendingProposalExistsError,
+  replacePendingBranchSuggestion,
+  StructureAlreadyExistsError,
 } from "@/lib/db/branch-suggestions";
 import { DatabaseError } from "@/lib/db/errors";
 import type { DbBranchSuggestion } from "@/types/db";
@@ -53,11 +56,9 @@ function createQueryBuilder(result: QueryResult) {
   const builder: Record<string, unknown> = {};
   const chain = () => builder;
 
-  builder.insert = vi.fn(chain);
   builder.select = vi.fn(chain);
   builder.eq = vi.fn(chain);
   builder.order = vi.fn(chain);
-  builder.single = vi.fn(async () => result);
   builder.maybeSingle = vi.fn(async () => result);
   builder.then = (
     onFulfilled: (value: QueryResult) => unknown,
@@ -68,11 +69,16 @@ function createQueryBuilder(result: QueryResult) {
 }
 
 const mockFrom = vi.fn();
+const mockReplaceRpc = vi.fn();
 
 vi.mock("@/lib/db/client", () => ({
   createSupabaseServerClient: () => ({
     from: mockFrom,
   }),
+}));
+
+vi.mock("@/lib/db/rpc", () => ({
+  replacePendingBranchSuggestion: (...args: unknown[]) => mockReplaceRpc(...args),
 }));
 
 describe("mapDbBranchSuggestionRow", () => {
@@ -90,6 +96,14 @@ describe("mapDbBranchSuggestionRow", () => {
       payload: validPayload,
       createdAt: "2026-01-01T00:00:00.000Z",
     });
+  });
+
+  it("accepts superseded status in row mapping", () => {
+    const mapped = mapDbBranchSuggestionRow(
+      makeDbRow({ status: "superseded", decided_at: "2026-01-02T00:00:00.000Z" }),
+    );
+
+    expect(mapped.status).toBe("superseded");
   });
 
   it("rejects malformed persisted payloads instead of omitting them", () => {
@@ -113,52 +127,141 @@ describe("mapDbBranchSuggestionRow", () => {
   });
 });
 
-describe("insertPendingBranchSuggestion", () => {
-  beforeEach(() => {
-    mockFrom.mockReset();
+describe("classifyBranchSuggestionPersistenceError", () => {
+  it("maps structure_already_exists RPC messages", () => {
+    expect(() =>
+      classifyBranchSuggestionPersistenceError({
+        message: "structure_already_exists",
+      }),
+    ).toThrow(StructureAlreadyExistsError);
   });
 
-  it("inserts pending rows with the correct ids and validated payload", async () => {
-    const insertedRow = makeDbRow();
-    const builder = createQueryBuilder({ data: insertedRow, error: null });
-    mockFrom.mockReturnValue(builder);
+  it("maps PostgreSQL 23505 for the pending-proposal index to pending_proposal_exists", () => {
+    expect(() =>
+      classifyBranchSuggestionPersistenceError({
+        message:
+          'duplicate key value violates unique constraint "branch_suggestions_one_pending_per_conversation_idx"',
+        code: "23505",
+      }),
+    ).toThrow(PendingProposalExistsError);
+  });
 
-    const result = await insertPendingBranchSuggestion({
-      worldId,
+  it("maps PostgreSQL 23505 for the pending-proposal index when the index appears in details", () => {
+    expect(() =>
+      classifyBranchSuggestionPersistenceError({
+        message: "duplicate key value violates unique constraint",
+        details:
+          'Key (conversation_id)=(cccccccc-cccc-4ccc-8ccc-cccccccccccc) already exists on index "branch_suggestions_one_pending_per_conversation_idx".',
+        code: "23505",
+      }),
+    ).toThrow(PendingProposalExistsError);
+  });
+
+  it("maps PostgreSQL 23505 for another unique constraint to DatabaseError", () => {
+    expect(() =>
+      classifyBranchSuggestionPersistenceError({
+        message:
+          'duplicate key value violates unique constraint "branch_suggestions_ai_run_id_key"',
+        code: "23505",
+      }),
+    ).toThrow(DatabaseError);
+  });
+
+  it("maps unknown database failures to DatabaseError", () => {
+    expect(() =>
+      classifyBranchSuggestionPersistenceError({
+        message: "connection failed",
+        code: "08006",
+      }),
+    ).toThrow(DatabaseError);
+  });
+});
+
+describe("replacePendingBranchSuggestion", () => {
+  beforeEach(() => {
+    mockReplaceRpc.mockReset();
+  });
+
+  it("calls the replacement RPC with conversation, ai_run, schema version, and payload only", async () => {
+    const insertedRow = makeDbRow();
+    mockReplaceRpc.mockResolvedValue(insertedRow);
+
+    const result = await replacePendingBranchSuggestion({
       conversationId,
-      parentNodeId,
       aiRunId,
+      schemaVersion: 1,
       suggestion: validPayload,
     });
 
-    expect(mockFrom).toHaveBeenCalledWith("branch_suggestions");
-    expect(builder.insert).toHaveBeenCalledWith({
-      world_id: worldId,
-      conversation_id: conversationId,
-      parent_node_id: parentNodeId,
-      ai_run_id: aiRunId,
-      status: "pending",
-      schema_version: 1,
+    expect(mockReplaceRpc).toHaveBeenCalledWith({
+      conversationId,
+      aiRunId,
+      schemaVersion: 1,
       payload: validPayload,
-      created_node_ids: null,
-      decided_at: null,
     });
     expect(result).toEqual(insertedRow);
   });
 
-  it("surfaces database insert failures as DatabaseError", async () => {
-    const builder = createQueryBuilder({
-      data: null,
-      error: { message: "duplicate key value violates unique constraint" },
+  it("classifies structure_already_exists from the RPC layer", async () => {
+    mockReplaceRpc.mockRejectedValue({
+      message: "structure_already_exists",
     });
-    mockFrom.mockReturnValue(builder);
 
     await expect(
-      insertPendingBranchSuggestion({
-        worldId,
+      replacePendingBranchSuggestion({
         conversationId,
-        parentNodeId,
         aiRunId,
+        schemaVersion: 1,
+        suggestion: validPayload,
+      }),
+    ).rejects.toThrow(StructureAlreadyExistsError);
+  });
+
+  it("classifies PostgreSQL 23505 for the pending-proposal index as pending_proposal_exists", async () => {
+    mockReplaceRpc.mockRejectedValue({
+      message:
+        'duplicate key value violates unique constraint "branch_suggestions_one_pending_per_conversation_idx"',
+      code: "23505",
+    });
+
+    await expect(
+      replacePendingBranchSuggestion({
+        conversationId,
+        aiRunId,
+        schemaVersion: 1,
+        suggestion: validPayload,
+      }),
+    ).rejects.toThrow(PendingProposalExistsError);
+  });
+
+  it("classifies PostgreSQL 23505 for another unique constraint as DatabaseError", async () => {
+    mockReplaceRpc.mockRejectedValue({
+      message:
+        'duplicate key value violates unique constraint "branch_suggestions_ai_run_id_key"',
+      code: "23505",
+    });
+
+    await expect(
+      replacePendingBranchSuggestion({
+        conversationId,
+        aiRunId,
+        schemaVersion: 1,
+        suggestion: validPayload,
+      }),
+    ).rejects.toThrow(DatabaseError);
+  });
+
+  it("surfaces unknown database failures as DatabaseError", async () => {
+    mockReplaceRpc.mockRejectedValue({
+      message: "connection failed",
+      code: "08006",
+    });
+
+    await expect(
+      replacePendingBranchSuggestion({
+        conversationId,
+        aiRunId,
+        schemaVersion: 1,
         suggestion: validPayload,
       }),
     ).rejects.toThrow(DatabaseError);
@@ -195,6 +298,16 @@ describe("listPendingBranchSuggestionsForConversation", () => {
       "11111111-1111-4111-8111-111111111111",
       "22222222-2222-4222-8222-222222222222",
     ]);
+    expect(results.every((row) => row.status === "pending")).toBe(true);
+  });
+
+  it("does not return superseded suggestions because the query filters pending only", async () => {
+    const builder = createQueryBuilder({ data: [], error: null });
+    mockFrom.mockReturnValue(builder);
+
+    await listPendingBranchSuggestionsForConversation(conversationId);
+
+    expect(builder.eq).toHaveBeenCalledWith("status", "pending");
   });
 
   it("rejects malformed persisted payloads instead of omitting them", async () => {

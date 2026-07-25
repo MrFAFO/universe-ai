@@ -110,6 +110,16 @@ export function mapGenerateFailureToHttpResponse(
         "persistence_error",
         BRANCH_SUGGESTION_API_ERROR_MESSAGES.persistence_error,
       );
+    case "structure_already_exists":
+      return NextResponse.json(
+        { code: "structure_already_exists" },
+        { status: 409 },
+      );
+    case "pending_proposal_exists":
+      return NextResponse.json(
+        { code: "pending_proposal_exists" },
+        { status: 409 },
+      );
     case "aborted":
       return errorResponse(
         BRANCH_SUGGESTION_ABORTED_HTTP_STATUS,

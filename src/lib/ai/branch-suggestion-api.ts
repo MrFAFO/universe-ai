@@ -59,6 +59,14 @@ export type BranchSuggestionApiErrorResponse = z.infer<
   typeof branchSuggestionApiErrorResponseSchema
 >;
 
+export const branchSuggestionConflictResponseSchema = z.object({
+  code: z.enum(["structure_already_exists", "pending_proposal_exists"]),
+});
+
+export type BranchSuggestionConflictResponse = z.infer<
+  typeof branchSuggestionConflictResponseSchema
+>;
+
 export const BRANCH_SUGGESTION_API_ERROR_MESSAGES = {
   invalid_parameters: "Invalid request parameters.",
   root_planning_not_found: "Root planning conversation not found.",
@@ -109,4 +117,10 @@ export function parseBranchSuggestionApiErrorResponse(
   raw: unknown,
 ): BranchSuggestionApiErrorResponse {
   return branchSuggestionApiErrorResponseSchema.parse(raw);
+}
+
+export function parseBranchSuggestionConflictResponse(
+  raw: unknown,
+): BranchSuggestionConflictResponse {
+  return branchSuggestionConflictResponseSchema.parse(raw);
 }

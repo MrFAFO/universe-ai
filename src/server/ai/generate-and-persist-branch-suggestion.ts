@@ -13,8 +13,10 @@ import {
   type RootPlanningContext,
 } from "@/lib/db/chat";
 import {
-  insertPendingBranchSuggestion,
   mapDbBranchSuggestionRow,
+  PendingProposalExistsError,
+  replacePendingBranchSuggestion,
+  StructureAlreadyExistsError,
   type PersistedBranchSuggestion,
 } from "@/lib/db/branch-suggestions";
 import { DatabaseError } from "@/lib/db/errors";
@@ -33,6 +35,8 @@ export const BRANCH_SUGGESTION_RUN_METADATA = {
 export type GenerateAndPersistBranchSuggestionFailureReason =
   | "root_planning_not_found"
   | GenerateBranchSuggestionFailureReason
+  | "structure_already_exists"
+  | "pending_proposal_exists"
   | "persistence_error";
 
 export type GenerateAndPersistBranchSuggestionResult =
@@ -65,11 +69,10 @@ export interface GenerateAndPersistBranchSuggestionDeps {
     messages: DbMessage[],
     options?: { signal?: AbortSignal },
   ): Promise<GenerateBranchSuggestionResult>;
-  insertPendingBranchSuggestion(input: {
-    worldId: string;
+  replacePendingBranchSuggestion(input: {
     conversationId: string;
-    parentNodeId: string;
     aiRunId: string;
+    schemaVersion: 1;
     suggestion: BranchSuggestionV1;
   }): Promise<DbBranchSuggestion>;
 }
@@ -83,7 +86,7 @@ export function createDefaultGenerateAndPersistBranchSuggestionDeps(): GenerateA
     completeAiRun,
     failAiRun,
     generateBranchSuggestion,
-    insertPendingBranchSuggestion,
+    replacePendingBranchSuggestion,
   };
 }
 
@@ -175,14 +178,31 @@ export async function generateAndPersistBranchSuggestion(
 
   let persistedRow: DbBranchSuggestion;
   try {
-    persistedRow = await resolvedDeps.insertPendingBranchSuggestion({
-      worldId: context.world.id,
+    persistedRow = await resolvedDeps.replacePendingBranchSuggestion({
       conversationId: context.conversation.id,
-      parentNodeId: context.node.id,
       aiRunId: aiRun.id,
+      schemaVersion: 1,
       suggestion: generation.suggestion,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof StructureAlreadyExistsError) {
+      await safeFailRun(
+        resolvedDeps,
+        aiRun.id,
+        "Initial world structure already exists.",
+      );
+      return { ok: false, reason: "structure_already_exists" };
+    }
+
+    if (error instanceof PendingProposalExistsError) {
+      await safeFailRun(
+        resolvedDeps,
+        aiRun.id,
+        "A pending branch suggestion already exists.",
+      );
+      return { ok: false, reason: "pending_proposal_exists" };
+    }
+
     await safeFailRun(
       resolvedDeps,
       aiRun.id,

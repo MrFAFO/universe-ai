@@ -3,6 +3,7 @@ import { parseBranchSuggestion } from "@/lib/ai/branch-suggestion";
 import type { DbBranchSuggestion, DbBranchSuggestionStatus } from "@/types/db";
 import { DatabaseError } from "./errors";
 import { createSupabaseServerClient } from "./client";
+import { replacePendingBranchSuggestion as replacePendingBranchSuggestionRpc } from "./rpc";
 
 export class BranchSuggestionPayloadError extends Error {
   readonly suggestionId: string;
@@ -11,6 +12,20 @@ export class BranchSuggestionPayloadError extends Error {
     super(`Stored branch suggestion payload is invalid (${suggestionId}).`);
     this.name = "BranchSuggestionPayloadError";
     this.suggestionId = suggestionId;
+  }
+}
+
+export class StructureAlreadyExistsError extends Error {
+  constructor() {
+    super("structure_already_exists");
+    this.name = "StructureAlreadyExistsError";
+  }
+}
+
+export class PendingProposalExistsError extends Error {
+  constructor() {
+    super("pending_proposal_exists");
+    this.name = "PendingProposalExistsError";
   }
 }
 
@@ -26,12 +41,69 @@ export interface PersistedBranchSuggestion {
   createdAt: string;
 }
 
-export interface InsertPendingBranchSuggestionInput {
-  worldId: string;
+export interface ReplacePendingBranchSuggestionInput {
   conversationId: string;
-  parentNodeId: string;
   aiRunId: string;
+  schemaVersion: 1;
   suggestion: BranchSuggestionV1;
+}
+
+interface PostgrestErrorLike {
+  message: string;
+  code?: string;
+  details?: string;
+}
+
+const PENDING_PROPOSAL_UNIQUE_INDEX =
+  "branch_suggestions_one_pending_per_conversation_idx";
+
+function isPostgrestErrorLike(error: unknown): error is PostgrestErrorLike {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as PostgrestErrorLike).message === "string"
+  );
+}
+
+function isPendingProposalUniqueViolation(error: PostgrestErrorLike): boolean {
+  if (error.code !== "23505") {
+    return false;
+  }
+
+  const constraintText = [error.message, error.details]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+
+  return constraintText.includes(PENDING_PROPOSAL_UNIQUE_INDEX);
+}
+
+export function classifyBranchSuggestionPersistenceError(error: unknown): never {
+  if (error instanceof StructureAlreadyExistsError) {
+    throw error;
+  }
+
+  if (error instanceof PendingProposalExistsError) {
+    throw error;
+  }
+
+  if (error instanceof DatabaseError) {
+    throw error;
+  }
+
+  if (isPostgrestErrorLike(error)) {
+    if (error.message.includes("structure_already_exists")) {
+      throw new StructureAlreadyExistsError();
+    }
+
+    if (isPendingProposalUniqueViolation(error)) {
+      throw new PendingProposalExistsError();
+    }
+
+    throw new DatabaseError(error.message);
+  }
+
+  throw error;
 }
 
 export function mapDbBranchSuggestionRow(
@@ -59,31 +131,19 @@ export function mapDbBranchSuggestionRow(
   };
 }
 
-export async function insertPendingBranchSuggestion(
-  input: InsertPendingBranchSuggestionInput,
+export async function replacePendingBranchSuggestion(
+  input: ReplacePendingBranchSuggestionInput,
 ): Promise<DbBranchSuggestion> {
-  const supabase = createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("branch_suggestions")
-    .insert({
-      world_id: input.worldId,
-      conversation_id: input.conversationId,
-      parent_node_id: input.parentNodeId,
-      ai_run_id: input.aiRunId,
-      status: "pending",
-      schema_version: input.suggestion.schemaVersion,
+  try {
+    return await replacePendingBranchSuggestionRpc({
+      conversationId: input.conversationId,
+      aiRunId: input.aiRunId,
+      schemaVersion: input.schemaVersion,
       payload: input.suggestion,
-      created_node_ids: null,
-      decided_at: null,
-    })
-    .select("*")
-    .single();
-
-  if (error || !data) {
-    throw new DatabaseError(error?.message ?? "Unable to persist branch suggestion.");
+    });
+  } catch (error) {
+    classifyBranchSuggestionPersistenceError(error);
   }
-
-  return data as DbBranchSuggestion;
 }
 
 export async function listPendingBranchSuggestionsForConversation(

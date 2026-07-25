@@ -43,3 +43,17 @@ export const approveBranchSuggestionResultSchema = z.object({
   created_node_ids: z.array(z.uuid()),
   idempotent: z.boolean(),
 });
+
+export const dbBranchSuggestionRowSchema = z.object({
+  id: z.uuid(),
+  world_id: z.uuid(),
+  conversation_id: z.uuid(),
+  parent_node_id: z.uuid(),
+  ai_run_id: z.uuid().nullable(),
+  status: z.enum(["pending", "approved", "rejected", "superseded"]),
+  schema_version: z.number().int(),
+  payload: z.record(z.string(), z.unknown()),
+  created_node_ids: z.array(z.uuid()).nullable(),
+  created_at: z.string(),
+  decided_at: z.string().nullable(),
+});

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { BranchSuggestionV1 } from "@/lib/ai/branch-suggestion";
 import { RootPlanningNotFoundError, type RootPlanningContext } from "@/lib/db/chat";
+import {
+  PendingProposalExistsError,
+  StructureAlreadyExistsError,
+} from "@/lib/db/branch-suggestions";
 import { DatabaseError } from "@/lib/db/errors";
 import {
   BRANCH_SUGGESTION_RUN_METADATA,
@@ -112,7 +116,7 @@ function createDeps(
       metadata?: Record<string, unknown> | null;
     }>;
     generate: Array<{ messages: DbMessage[]; signal?: AbortSignal }>;
-    insert: Array<Record<string, unknown>>;
+    replace: Array<Record<string, unknown>>;
     complete: Array<Record<string, unknown>>;
     fail: Array<{ aiRunId: string; summary: string }>;
   };
@@ -126,7 +130,7 @@ function createDeps(
       metadata?: Record<string, unknown> | null;
     }>,
     generate: [] as Array<{ messages: DbMessage[]; signal?: AbortSignal }>,
-    insert: [] as Array<Record<string, unknown>>,
+    replace: [] as Array<Record<string, unknown>>,
     complete: [] as Array<Record<string, unknown>>,
     fail: [] as Array<{ aiRunId: string; summary: string }>,
   };
@@ -166,8 +170,8 @@ function createDeps(
         outputTokens: 17,
       };
     }),
-    insertPendingBranchSuggestion: vi.fn(async (input) => {
-      calls.insert.push(input);
+    replacePendingBranchSuggestion: vi.fn(async (input) => {
+      calls.replace.push(input);
       return makePersistedRow();
     }),
     ...overrides,
@@ -234,7 +238,7 @@ describe("generateAndPersistBranchSuggestion", () => {
     });
   });
 
-  it("calls generation exactly once and persists only after success", async () => {
+  it("calls generation exactly once and persists via the replacement RPC after success", async () => {
     const deps = createDeps();
     const order: string[] = [];
 
@@ -248,13 +252,12 @@ describe("generateAndPersistBranchSuggestion", () => {
         outputTokens: 17,
       };
     });
-    deps.insertPendingBranchSuggestion = vi.fn(async (input) => {
-      order.push("insert");
+    deps.replacePendingBranchSuggestion = vi.fn(async (input) => {
+      order.push("replace");
       expect(input).toEqual({
-        worldId,
         conversationId,
-        parentNodeId: nodeId,
         aiRunId,
+        schemaVersion: 1,
         suggestion: validSuggestion,
       });
       return makePersistedRow();
@@ -269,7 +272,7 @@ describe("generateAndPersistBranchSuggestion", () => {
     );
 
     expect(deps.generateBranchSuggestion).toHaveBeenCalledTimes(1);
-    expect(order).toEqual(["generate", "insert", "complete"]);
+    expect(order).toEqual(["generate", "replace", "complete"]);
     expect(result.ok).toBe(true);
   });
 
@@ -309,7 +312,7 @@ describe("generateAndPersistBranchSuggestion", () => {
     });
   });
 
-  it("fails the ai_run and inserts no suggestion on provider failure", async () => {
+  it("fails the ai_run and does not call the replacement RPC on provider failure", async () => {
     const deps = createDeps({
       generateBranchSuggestion: vi.fn(async () => ({
         ok: false as const,
@@ -323,12 +326,12 @@ describe("generateAndPersistBranchSuggestion", () => {
     );
 
     expect(result).toEqual({ ok: false, reason: "provider_error" });
-    expect(deps.insertPendingBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.replacePendingBranchSuggestion).not.toHaveBeenCalled();
     expect(deps.failAiRun).toHaveBeenCalledWith(aiRunId, "provider_error");
     expect(deps.completeAiRun).not.toHaveBeenCalled();
   });
 
-  it("fails the ai_run and inserts no suggestion on invalid structured output", async () => {
+  it("fails the ai_run and does not call the replacement RPC on invalid structured output", async () => {
     const deps = createDeps({
       generateBranchSuggestion: vi.fn(async () => ({
         ok: false as const,
@@ -345,7 +348,7 @@ describe("generateAndPersistBranchSuggestion", () => {
       ok: false,
       reason: "invalid_structured_output",
     });
-    expect(deps.insertPendingBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.replacePendingBranchSuggestion).not.toHaveBeenCalled();
     expect(deps.failAiRun).toHaveBeenCalledWith(
       aiRunId,
       "invalid_structured_output",
@@ -366,10 +369,10 @@ describe("generateAndPersistBranchSuggestion", () => {
     expect(deps.resolveRootPlanningConversation).not.toHaveBeenCalled();
     expect(deps.createAiRun).not.toHaveBeenCalled();
     expect(deps.failAiRun).not.toHaveBeenCalled();
-    expect(deps.insertPendingBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.replacePendingBranchSuggestion).not.toHaveBeenCalled();
   });
 
-  it("fails an existing ai_run and inserts no suggestion when generation aborts", async () => {
+  it("fails an existing ai_run and does not call the replacement RPC when generation aborts", async () => {
     const controller = new AbortController();
     const deps = createDeps({
       generateBranchSuggestion: vi.fn(async () => {
@@ -386,13 +389,53 @@ describe("generateAndPersistBranchSuggestion", () => {
     expect(result).toEqual({ ok: false, reason: "aborted" });
     expect(deps.createAiRun).toHaveBeenCalledTimes(1);
     expect(deps.failAiRun).toHaveBeenCalledWith(aiRunId, "aborted");
-    expect(deps.insertPendingBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.replacePendingBranchSuggestion).not.toHaveBeenCalled();
   });
 
-  it("attempts to fail the ai_run and returns persistence_error on insert failure", async () => {
+  it("returns structure_already_exists when the replacement RPC rejects with that conflict", async () => {
     const deps = createDeps({
-      insertPendingBranchSuggestion: vi.fn(async () => {
-        throw new DatabaseError("insert failed");
+      replacePendingBranchSuggestion: vi.fn(async () => {
+        throw new StructureAlreadyExistsError();
+      }),
+    });
+
+    const result = await generateAndPersistBranchSuggestion(
+      { worldId, nodeId },
+      deps,
+    );
+
+    expect(result).toEqual({ ok: false, reason: "structure_already_exists" });
+    expect(deps.failAiRun).toHaveBeenCalledWith(
+      aiRunId,
+      "Initial world structure already exists.",
+    );
+    expect(deps.completeAiRun).not.toHaveBeenCalled();
+  });
+
+  it("returns pending_proposal_exists when the replacement RPC hits a 23505 conflict", async () => {
+    const deps = createDeps({
+      replacePendingBranchSuggestion: vi.fn(async () => {
+        throw new PendingProposalExistsError();
+      }),
+    });
+
+    const result = await generateAndPersistBranchSuggestion(
+      { worldId, nodeId },
+      deps,
+    );
+
+    expect(result).toEqual({ ok: false, reason: "pending_proposal_exists" });
+    expect(deps.failAiRun).toHaveBeenCalledWith(
+      aiRunId,
+      "A pending branch suggestion already exists.",
+    );
+    expect(deps.completeAiRun).not.toHaveBeenCalled();
+  });
+
+  it("attempts to fail the ai_run and returns persistence_error on unknown replace failure", async () => {
+    const deps = createDeps({
+      replacePendingBranchSuggestion: vi.fn(async () => {
+        throw new DatabaseError("replace failed");
       }),
     });
 
@@ -409,7 +452,7 @@ describe("generateAndPersistBranchSuggestion", () => {
     expect(deps.completeAiRun).not.toHaveBeenCalled();
   });
 
-  it("returns persistence_error when ai_run completion fails after insert", async () => {
+  it("returns persistence_error when ai_run completion fails after replace", async () => {
     const deps = createDeps({
       completeAiRun: vi.fn(async () => {
         throw new DatabaseError("completion failed");
@@ -422,14 +465,14 @@ describe("generateAndPersistBranchSuggestion", () => {
     );
 
     expect(result).toEqual({ ok: false, reason: "persistence_error" });
-    expect(deps.insertPendingBranchSuggestion).toHaveBeenCalledTimes(1);
+    expect(deps.replacePendingBranchSuggestion).toHaveBeenCalledTimes(1);
     expect(deps.failAiRun).toHaveBeenCalledWith(
       aiRunId,
       "Branch suggestion ai_run completion failed.",
     );
   });
 
-  it("does not retry generation or insert a duplicate suggestion", async () => {
+  it("does not retry generation or call the replacement RPC twice", async () => {
     const deps = createDeps({
       generateBranchSuggestion: vi.fn(async () => ({
         ok: false as const,
@@ -440,12 +483,12 @@ describe("generateAndPersistBranchSuggestion", () => {
     await generateAndPersistBranchSuggestion({ worldId, nodeId }, deps);
 
     expect(deps.generateBranchSuggestion).toHaveBeenCalledTimes(1);
-    expect(deps.insertPendingBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.replacePendingBranchSuggestion).not.toHaveBeenCalled();
   });
 
   it("does not expose raw database errors in safe failure results", async () => {
     const deps = createDeps({
-      insertPendingBranchSuggestion: vi.fn(async () => {
+      replacePendingBranchSuggestion: vi.fn(async () => {
         throw new DatabaseError("raw database secret details");
       }),
     });

@@ -3,6 +3,7 @@ import type { BranchSuggestionV1 } from "@/lib/ai/branch-suggestion";
 import {
   BRANCH_SUGGESTION_ABORTED_HTTP_STATUS,
   parseBranchSuggestionApiErrorResponse,
+  parseBranchSuggestionConflictResponse,
   parseGetBranchSuggestionsResponse,
   parsePostBranchSuggestionResponse,
 } from "@/lib/ai/branch-suggestion-api";
@@ -225,6 +226,44 @@ describe("handlePostBranchSuggestions", () => {
     expect(body.error.length).toBeGreaterThan(0);
     expect(JSON.stringify(body)).not.toContain("OpenAI");
     expect(JSON.stringify(body)).not.toContain("Supabase");
+  });
+
+  it("maps structure_already_exists to HTTP 409 with a stable conflict code", async () => {
+    const deps = createDeps({
+      generateAndPersistBranchSuggestion: vi.fn(async () => ({
+        ok: false as const,
+        reason: "structure_already_exists" as const,
+      })),
+    });
+
+    const response = await handlePostBranchSuggestions(
+      { worldId, nodeId, signal: new AbortController().signal },
+      deps,
+    );
+
+    expect(response.status).toBe(409);
+    expect(parseBranchSuggestionConflictResponse(await readJson(response))).toEqual({
+      code: "structure_already_exists",
+    });
+  });
+
+  it("maps pending_proposal_exists to HTTP 409 with a stable conflict code", async () => {
+    const deps = createDeps({
+      generateAndPersistBranchSuggestion: vi.fn(async () => ({
+        ok: false as const,
+        reason: "pending_proposal_exists" as const,
+      })),
+    });
+
+    const response = await handlePostBranchSuggestions(
+      { worldId, nodeId, signal: new AbortController().signal },
+      deps,
+    );
+
+    expect(response.status).toBe(409);
+    expect(parseBranchSuggestionConflictResponse(await readJson(response))).toEqual({
+      code: "pending_proposal_exists",
+    });
   });
 
   it("exposes only safe code and message fields on failure", async () => {

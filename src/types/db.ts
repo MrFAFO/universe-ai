@@ -11,7 +11,11 @@ export type DbMessageRole = "system" | "user" | "assistant" | "tool";
 
 export type DbAiRunStatus = "running" | "completed" | "failed";
 
-export type DbBranchSuggestionStatus = "pending" | "approved" | "rejected";
+export type DbBranchSuggestionStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "superseded";
 
 export type DbRelationType = RelationType;
 
