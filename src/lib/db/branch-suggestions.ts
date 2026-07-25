@@ -3,7 +3,10 @@ import { parseBranchSuggestion } from "@/lib/ai/branch-suggestion";
 import type { DbBranchSuggestion, DbBranchSuggestionStatus } from "@/types/db";
 import { DatabaseError } from "./errors";
 import { createSupabaseServerClient } from "./client";
-import { replacePendingBranchSuggestion as replacePendingBranchSuggestionRpc } from "./rpc";
+import {
+  beginBranchSuggestionAiRun as beginBranchSuggestionAiRunRpc,
+  replacePendingBranchSuggestion as replacePendingBranchSuggestionRpc,
+} from "./rpc";
 
 export class BranchSuggestionPayloadError extends Error {
   readonly suggestionId: string;
@@ -29,6 +32,13 @@ export class PendingProposalExistsError extends Error {
   }
 }
 
+export class GenerationInProgressError extends Error {
+  constructor() {
+    super("generation_in_progress");
+    this.name = "GenerationInProgressError";
+  }
+}
+
 export interface PersistedBranchSuggestion {
   id: string;
   worldId: string;
@@ -48,6 +58,12 @@ export interface ReplacePendingBranchSuggestionInput {
   suggestion: BranchSuggestionV1;
 }
 
+export interface BeginBranchSuggestionAiRunInput {
+  conversationId: string;
+  model: string;
+  schemaVersion: 1;
+}
+
 interface PostgrestErrorLike {
   message: string;
   code?: string;
@@ -56,6 +72,9 @@ interface PostgrestErrorLike {
 
 const PENDING_PROPOSAL_UNIQUE_INDEX =
   "branch_suggestions_one_pending_per_conversation_idx";
+
+const RUNNING_BRANCH_SUGGESTION_UNIQUE_INDEX =
+  "ai_runs_one_running_branch_suggestion_per_conversation_idx";
 
 function isPostgrestErrorLike(error: unknown): error is PostgrestErrorLike {
   return (
@@ -76,6 +95,52 @@ function isPendingProposalUniqueViolation(error: PostgrestErrorLike): boolean {
     .join(" ");
 
   return constraintText.includes(PENDING_PROPOSAL_UNIQUE_INDEX);
+}
+
+function isRunningBranchSuggestionUniqueViolation(
+  error: PostgrestErrorLike,
+): boolean {
+  if (error.code !== "23505") {
+    return false;
+  }
+
+  const constraintText = [error.message, error.details]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+
+  return constraintText.includes(RUNNING_BRANCH_SUGGESTION_UNIQUE_INDEX);
+}
+
+export function classifyBranchSuggestionAcquisitionError(error: unknown): never {
+  if (error instanceof GenerationInProgressError) {
+    throw error;
+  }
+
+  if (error instanceof StructureAlreadyExistsError) {
+    throw error;
+  }
+
+  if (error instanceof DatabaseError) {
+    throw error;
+  }
+
+  if (isPostgrestErrorLike(error)) {
+    if (error.message.includes("generation_in_progress")) {
+      throw new GenerationInProgressError();
+    }
+
+    if (error.message.includes("structure_already_exists")) {
+      throw new StructureAlreadyExistsError();
+    }
+
+    if (isRunningBranchSuggestionUniqueViolation(error)) {
+      throw new GenerationInProgressError();
+    }
+
+    throw new DatabaseError(error.message);
+  }
+
+  throw error;
 }
 
 export function classifyBranchSuggestionPersistenceError(error: unknown): never {
@@ -129,6 +194,20 @@ export function mapDbBranchSuggestionRow(
     payload: parsed.suggestion,
     createdAt: row.created_at,
   };
+}
+
+export async function beginBranchSuggestionAiRun(
+  input: BeginBranchSuggestionAiRunInput,
+): Promise<{ id: string }> {
+  try {
+    return await beginBranchSuggestionAiRunRpc({
+      conversationId: input.conversationId,
+      model: input.model,
+      schemaVersion: input.schemaVersion,
+    });
+  } catch (error) {
+    classifyBranchSuggestionAcquisitionError(error);
+  }
 }
 
 export async function replacePendingBranchSuggestion(

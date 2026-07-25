@@ -99,11 +99,15 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 - Generate World Structure button, pending proposal loading, explicit POST generation, proposal review display
 - Client helpers, tests, and styles
 
-**Approved target not yet implemented:**
+**Implemented in Stage D4.4:**
 
 - Single pending proposal invariant (`superseded` status, partial unique index, replacement RPC)
 - Initial-structure-only enforcement (`structure_already_exists`)
-- Bounded stale-run policy for abandoned branch-suggestion `ai_runs`
+- Bounded stale-run recovery for abandoned Branch Suggestion `ai_runs`
+- Branch Suggestion generation acquires its `ai_run` atomically through `begin_branch_suggestion_ai_run` before calling OpenAI
+
+**Approved target not yet implemented:**
+
 - Chronological timeline integration (`BranchSuggestionCard` as timeline item)
 - Code-owned domain-neutral Root Planning prompt and World brief
 - Readiness assessment and Discovery (`StructureAssessmentV1`)

@@ -57,3 +57,7 @@ export const dbBranchSuggestionRowSchema = z.object({
   created_at: z.string(),
   decided_at: z.string().nullable(),
 });
+
+export const beginBranchSuggestionAiRunResultSchema = z.object({
+  id: z.uuid(),
+});

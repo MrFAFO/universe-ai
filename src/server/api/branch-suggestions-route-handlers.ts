@@ -120,6 +120,11 @@ export function mapGenerateFailureToHttpResponse(
         { code: "pending_proposal_exists" },
         { status: 409 },
       );
+    case "generation_in_progress":
+      return NextResponse.json(
+        { code: "generation_in_progress" },
+        { status: 409 },
+      );
     case "aborted":
       return errorResponse(
         BRANCH_SUGGESTION_ABORTED_HTTP_STATUS,

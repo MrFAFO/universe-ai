@@ -2,12 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import type { BranchSuggestionV1 } from "@/lib/ai/branch-suggestion";
 import { RootPlanningNotFoundError, type RootPlanningContext } from "@/lib/db/chat";
 import {
+  GenerationInProgressError,
   PendingProposalExistsError,
   StructureAlreadyExistsError,
 } from "@/lib/db/branch-suggestions";
 import { DatabaseError } from "@/lib/db/errors";
 import {
-  BRANCH_SUGGESTION_RUN_METADATA,
   generateAndPersistBranchSuggestion,
   type GenerateAndPersistBranchSuggestionDeps,
 } from "@/server/ai/generate-and-persist-branch-suggestion";
@@ -110,10 +110,10 @@ function createDeps(
   calls: {
     resolve: Array<{ worldId: string; nodeId: string }>;
     listMessages: string[];
-    createAiRun: Array<{
+    begin: Array<{
       conversationId: string;
       model: string;
-      metadata?: Record<string, unknown> | null;
+      schemaVersion: 1;
     }>;
     generate: Array<{ messages: DbMessage[]; signal?: AbortSignal }>;
     replace: Array<Record<string, unknown>>;
@@ -124,10 +124,10 @@ function createDeps(
   const calls = {
     resolve: [] as Array<{ worldId: string; nodeId: string }>,
     listMessages: [] as string[],
-    createAiRun: [] as Array<{
+    begin: [] as Array<{
       conversationId: string;
       model: string;
-      metadata?: Record<string, unknown> | null;
+      schemaVersion: 1;
     }>,
     generate: [] as Array<{ messages: DbMessage[]; signal?: AbortSignal }>,
     replace: [] as Array<Record<string, unknown>>,
@@ -146,12 +146,8 @@ function createDeps(
       return messages;
     }),
     getModel: vi.fn(() => "gpt-test"),
-    createAiRun: vi.fn(async (resolvedConversationId, model, options) => {
-      calls.createAiRun.push({
-        conversationId: resolvedConversationId,
-        model,
-        metadata: options?.metadata,
-      });
+    beginBranchSuggestionAiRun: vi.fn(async (input) => {
+      calls.begin.push(input);
       return { id: aiRunId };
     }),
     completeAiRun: vi.fn(async (resolvedAiRunId, input) => {
@@ -193,10 +189,10 @@ describe("generateAndPersistBranchSuggestion", () => {
 
     expect(result).toEqual({ ok: false, reason: "root_planning_not_found" });
     expect(deps.generateBranchSuggestion).not.toHaveBeenCalled();
-    expect(deps.createAiRun).not.toHaveBeenCalled();
+    expect(deps.beginBranchSuggestionAiRun).not.toHaveBeenCalled();
   });
 
-  it("loads history before creating the ai_run and generating", async () => {
+  it("loads history before acquiring the ai_run and generating", async () => {
     const deps = createDeps();
     const order: string[] = [];
 
@@ -208,8 +204,8 @@ describe("generateAndPersistBranchSuggestion", () => {
       order.push("list");
       return messages;
     });
-    deps.createAiRun = vi.fn(async () => {
-      order.push("createAiRun");
+    deps.beginBranchSuggestionAiRun = vi.fn(async () => {
+      order.push("begin");
       return { id: aiRunId };
     });
     deps.generateBranchSuggestion = vi.fn(async () => {
@@ -225,16 +221,18 @@ describe("generateAndPersistBranchSuggestion", () => {
 
     await generateAndPersistBranchSuggestion({ worldId, nodeId }, deps);
 
-    expect(order).toEqual(["resolve", "list", "createAiRun", "generate"]);
+    expect(order).toEqual(["resolve", "list", "begin", "generate"]);
   });
 
-  it("creates an ai_run with model and branch-suggestion metadata", async () => {
+  it("acquires an ai_run with conversation id, model, and schema version 1", async () => {
     const deps = createDeps();
 
     await generateAndPersistBranchSuggestion({ worldId, nodeId }, deps);
 
-    expect(deps.createAiRun).toHaveBeenCalledWith(conversationId, "gpt-test", {
-      metadata: { ...BRANCH_SUGGESTION_RUN_METADATA },
+    expect(deps.beginBranchSuggestionAiRun).toHaveBeenCalledWith({
+      conversationId,
+      model: "gpt-test",
+      schemaVersion: 1,
     });
   });
 
@@ -242,6 +240,10 @@ describe("generateAndPersistBranchSuggestion", () => {
     const deps = createDeps();
     const order: string[] = [];
 
+    deps.beginBranchSuggestionAiRun = vi.fn(async () => {
+      order.push("begin");
+      return { id: aiRunId };
+    });
     deps.generateBranchSuggestion = vi.fn(async () => {
       order.push("generate");
       return {
@@ -272,7 +274,7 @@ describe("generateAndPersistBranchSuggestion", () => {
     );
 
     expect(deps.generateBranchSuggestion).toHaveBeenCalledTimes(1);
-    expect(order).toEqual(["generate", "replace", "complete"]);
+    expect(order).toEqual(["begin", "generate", "replace", "complete"]);
     expect(result.ok).toBe(true);
   });
 
@@ -310,6 +312,60 @@ describe("generateAndPersistBranchSuggestion", () => {
       inputTokens: 42,
       outputTokens: 17,
     });
+  });
+
+  it("returns generation_in_progress without calling OpenAI, replacement, completion, or failAiRun", async () => {
+    const deps = createDeps({
+      beginBranchSuggestionAiRun: vi.fn(async () => {
+        throw new GenerationInProgressError();
+      }),
+    });
+
+    const result = await generateAndPersistBranchSuggestion(
+      { worldId, nodeId },
+      deps,
+    );
+
+    expect(result).toEqual({ ok: false, reason: "generation_in_progress" });
+    expect(deps.generateBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.replacePendingBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.completeAiRun).not.toHaveBeenCalled();
+    expect(deps.failAiRun).not.toHaveBeenCalled();
+  });
+
+  it("returns structure_already_exists on acquisition without calling OpenAI or failAiRun", async () => {
+    const deps = createDeps({
+      beginBranchSuggestionAiRun: vi.fn(async () => {
+        throw new StructureAlreadyExistsError();
+      }),
+    });
+
+    const result = await generateAndPersistBranchSuggestion(
+      { worldId, nodeId },
+      deps,
+    );
+
+    expect(result).toEqual({ ok: false, reason: "structure_already_exists" });
+    expect(deps.generateBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.failAiRun).not.toHaveBeenCalled();
+  });
+
+  it("returns persistence_error on other acquisition failures without calling OpenAI or failAiRun", async () => {
+    const deps = createDeps({
+      beginBranchSuggestionAiRun: vi.fn(async () => {
+        throw new DatabaseError("acquisition failed");
+      }),
+    });
+
+    const result = await generateAndPersistBranchSuggestion(
+      { worldId, nodeId },
+      deps,
+    );
+
+    expect(result).toEqual({ ok: false, reason: "persistence_error" });
+    expect(deps.generateBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.failAiRun).not.toHaveBeenCalled();
+    expect(String(result)).not.toContain("acquisition failed");
   });
 
   it("fails the ai_run and does not call the replacement RPC on provider failure", async () => {
@@ -367,12 +423,12 @@ describe("generateAndPersistBranchSuggestion", () => {
 
     expect(result).toEqual({ ok: false, reason: "aborted" });
     expect(deps.resolveRootPlanningConversation).not.toHaveBeenCalled();
-    expect(deps.createAiRun).not.toHaveBeenCalled();
+    expect(deps.beginBranchSuggestionAiRun).not.toHaveBeenCalled();
     expect(deps.failAiRun).not.toHaveBeenCalled();
     expect(deps.replacePendingBranchSuggestion).not.toHaveBeenCalled();
   });
 
-  it("fails an existing ai_run and does not call the replacement RPC when generation aborts", async () => {
+  it("fails an acquired ai_run and does not call the replacement RPC when generation aborts", async () => {
     const controller = new AbortController();
     const deps = createDeps({
       generateBranchSuggestion: vi.fn(async () => {
@@ -387,7 +443,7 @@ describe("generateAndPersistBranchSuggestion", () => {
     );
 
     expect(result).toEqual({ ok: false, reason: "aborted" });
-    expect(deps.createAiRun).toHaveBeenCalledTimes(1);
+    expect(deps.beginBranchSuggestionAiRun).toHaveBeenCalledTimes(1);
     expect(deps.failAiRun).toHaveBeenCalledWith(aiRunId, "aborted");
     expect(deps.replacePendingBranchSuggestion).not.toHaveBeenCalled();
   });

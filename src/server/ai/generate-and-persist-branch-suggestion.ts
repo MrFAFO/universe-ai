@@ -4,7 +4,6 @@ import type { BranchSuggestionV1 } from "@/lib/ai/branch-suggestion";
 import { getOpenAIModel } from "@/lib/ai/openai";
 import {
   completeAiRun,
-  createAiRun,
   failAiRun,
   listConversationMessages,
   resolveRootPlanningConversation,
@@ -13,6 +12,8 @@ import {
   type RootPlanningContext,
 } from "@/lib/db/chat";
 import {
+  beginBranchSuggestionAiRun,
+  GenerationInProgressError,
   mapDbBranchSuggestionRow,
   PendingProposalExistsError,
   replacePendingBranchSuggestion,
@@ -27,14 +28,10 @@ import {
   type GenerateBranchSuggestionResult,
 } from "@/server/ai/generate-branch-suggestion";
 
-export const BRANCH_SUGGESTION_RUN_METADATA = {
-  purpose: "branch_suggestion",
-  schemaVersion: 1,
-} as const;
-
 export type GenerateAndPersistBranchSuggestionFailureReason =
   | "root_planning_not_found"
   | GenerateBranchSuggestionFailureReason
+  | "generation_in_progress"
   | "structure_already_exists"
   | "pending_proposal_exists"
   | "persistence_error";
@@ -56,13 +53,11 @@ export interface GenerateAndPersistBranchSuggestionDeps {
   ): Promise<RootPlanningContext>;
   listConversationMessages(conversationId: string): Promise<DbMessage[]>;
   getModel(): string;
-  createAiRun(
-    conversationId: string,
-    model: string,
-    options?: {
-      metadata?: Record<string, unknown> | null;
-    },
-  ): Promise<{ id: string }>;
+  beginBranchSuggestionAiRun(input: {
+    conversationId: string;
+    model: string;
+    schemaVersion: 1;
+  }): Promise<{ id: string }>;
   completeAiRun(aiRunId: string, input: CompleteAiRunInput): Promise<void>;
   failAiRun(aiRunId: string, errorSummary: string): Promise<void>;
   generateBranchSuggestion(
@@ -82,7 +77,7 @@ export function createDefaultGenerateAndPersistBranchSuggestionDeps(): GenerateA
     resolveRootPlanningConversation,
     listConversationMessages,
     getModel: getOpenAIModel,
-    createAiRun,
+    beginBranchSuggestionAiRun,
     completeAiRun,
     failAiRun,
     generateBranchSuggestion,
@@ -156,10 +151,20 @@ export async function generateAndPersistBranchSuggestion(
 
   let aiRun: { id: string };
   try {
-    aiRun = await resolvedDeps.createAiRun(context.conversation.id, model, {
-      metadata: { ...BRANCH_SUGGESTION_RUN_METADATA },
+    aiRun = await resolvedDeps.beginBranchSuggestionAiRun({
+      conversationId: context.conversation.id,
+      model,
+      schemaVersion: 1,
     });
   } catch (error) {
+    if (error instanceof GenerationInProgressError) {
+      return { ok: false, reason: "generation_in_progress" };
+    }
+
+    if (error instanceof StructureAlreadyExistsError) {
+      return { ok: false, reason: "structure_already_exists" };
+    }
+
     if (error instanceof DatabaseError) {
       return { ok: false, reason: "persistence_error" };
     }

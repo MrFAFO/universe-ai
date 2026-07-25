@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BranchSuggestionV1 } from "@/lib/ai/branch-suggestion";
-import { replacePendingBranchSuggestion } from "@/lib/db/rpc";
+import { replacePendingBranchSuggestion, beginBranchSuggestionAiRun } from "@/lib/db/rpc";
 import { DatabaseError } from "@/lib/db/errors";
 import type { DbBranchSuggestion } from "@/types/db";
 
@@ -120,6 +120,102 @@ describe("replacePendingBranchSuggestion RPC wrapper", () => {
         aiRunId,
         schemaVersion: 1,
         payload: validPayload,
+      }),
+    ).rejects.toThrow(DatabaseError);
+  });
+});
+
+describe("beginBranchSuggestionAiRun RPC wrapper", () => {
+  beforeEach(() => {
+    mockRpc.mockReset();
+  });
+
+  it("maps arguments to the Supabase RPC parameter names", async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        id: aiRunId,
+        conversation_id: conversationId,
+        model: "gpt-test",
+        status: "running",
+      },
+      error: null,
+    });
+
+    const result = await beginBranchSuggestionAiRun({
+      conversationId,
+      model: "gpt-test",
+      schemaVersion: 1,
+    });
+
+    expect(mockRpc).toHaveBeenCalledWith("begin_branch_suggestion_ai_run", {
+      p_conversation_id: conversationId,
+      p_model: "gpt-test",
+      p_schema_version: 1,
+    });
+    expect(result).toEqual({ id: aiRunId });
+  });
+
+  it("parses a valid id from the RPC JSONB row", async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        id: aiRunId,
+        conversation_id: conversationId,
+        model: "gpt-test",
+        status: "running",
+        metadata: { purpose: "branch_suggestion", schemaVersion: 1 },
+        created_at: "2026-01-01T00:00:00.000Z",
+      },
+      error: null,
+    });
+
+    const result = await beginBranchSuggestionAiRun({
+      conversationId,
+      model: "gpt-test",
+      schemaVersion: 1,
+    });
+
+    expect(result.id).toBe(aiRunId);
+  });
+
+  it("rejects a non-UUID id in the RPC result", async () => {
+    mockRpc.mockResolvedValue({
+      data: { id: "not-a-uuid" },
+      error: null,
+    });
+
+    await expect(
+      beginBranchSuggestionAiRun({
+        conversationId,
+        model: "gpt-test",
+        schemaVersion: 1,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("rethrows Supabase RPC errors for upstream classification", async () => {
+    const rpcError = {
+      message: "generation_in_progress",
+      code: "P0001",
+    };
+    mockRpc.mockResolvedValue({ data: null, error: rpcError });
+
+    await expect(
+      beginBranchSuggestionAiRun({
+        conversationId,
+        model: "gpt-test",
+        schemaVersion: 1,
+      }),
+    ).rejects.toEqual(rpcError);
+  });
+
+  it("throws DatabaseError when RPC returns no data", async () => {
+    mockRpc.mockResolvedValue({ data: null, error: null });
+
+    await expect(
+      beginBranchSuggestionAiRun({
+        conversationId,
+        model: "gpt-test",
+        schemaVersion: 1,
       }),
     ).rejects.toThrow(DatabaseError);
   });

@@ -266,6 +266,25 @@ describe("handlePostBranchSuggestions", () => {
     });
   });
 
+  it("maps generation_in_progress to HTTP 409 with a stable conflict code", async () => {
+    const deps = createDeps({
+      generateAndPersistBranchSuggestion: vi.fn(async () => ({
+        ok: false as const,
+        reason: "generation_in_progress" as const,
+      })),
+    });
+
+    const response = await handlePostBranchSuggestions(
+      { worldId, nodeId, signal: new AbortController().signal },
+      deps,
+    );
+
+    expect(response.status).toBe(409);
+    expect(parseBranchSuggestionConflictResponse(await readJson(response))).toEqual({
+      code: "generation_in_progress",
+    });
+  });
+
   it("exposes only safe code and message fields on failure", async () => {
     const deps = createDeps({
       generateAndPersistBranchSuggestion: vi.fn(async () => ({

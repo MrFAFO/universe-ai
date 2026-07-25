@@ -6,6 +6,7 @@ import type {
 } from "@/types/db";
 import {
   approveBranchSuggestionResultSchema,
+  beginBranchSuggestionAiRunResultSchema,
   createWorldWithRootResultSchema,
   dbBranchSuggestionRowSchema,
   type ApproveSuggestionInput,
@@ -19,6 +20,12 @@ export interface ReplacePendingBranchSuggestionRpcInput {
   aiRunId: string;
   schemaVersion: 1;
   payload: BranchSuggestionV1;
+}
+
+export interface BeginBranchSuggestionAiRunRpcInput {
+  conversationId: string;
+  model: string;
+  schemaVersion: 1;
 }
 
 export async function createWorldWithRoot(
@@ -72,4 +79,25 @@ export async function replacePendingBranchSuggestion(
   }
 
   return dbBranchSuggestionRowSchema.parse(data) as DbBranchSuggestion;
+}
+
+export async function beginBranchSuggestionAiRun(
+  input: BeginBranchSuggestionAiRunRpcInput,
+): Promise<{ id: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("begin_branch_suggestion_ai_run", {
+    p_conversation_id: input.conversationId,
+    p_model: input.model,
+    p_schema_version: input.schemaVersion,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw new DatabaseError("Unable to acquire branch suggestion ai_run.");
+  }
+
+  return beginBranchSuggestionAiRunResultSchema.parse(data);
 }

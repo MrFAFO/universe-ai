@@ -60,7 +60,11 @@ export type BranchSuggestionApiErrorResponse = z.infer<
 >;
 
 export const branchSuggestionConflictResponseSchema = z.object({
-  code: z.enum(["structure_already_exists", "pending_proposal_exists"]),
+  code: z.enum([
+    "structure_already_exists",
+    "pending_proposal_exists",
+    "generation_in_progress",
+  ]),
 });
 
 export type BranchSuggestionConflictResponse = z.infer<

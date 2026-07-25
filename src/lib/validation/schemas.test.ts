@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   approveBranchSuggestionResultSchema,
   approveSuggestionInputSchema,
+  beginBranchSuggestionAiRunResultSchema,
   conversationIdParamSchema,
   createWorldInputSchema,
   createWorldWithRootResultSchema,
@@ -102,5 +103,19 @@ describe("RPC result schemas", () => {
     });
 
     expect(result.created_node_ids).toEqual([nodeId]);
+  });
+
+  it("parses begin_branch_suggestion_ai_run result", () => {
+    const result = beginBranchSuggestionAiRunResultSchema.parse({
+      id: suggestionId,
+    });
+
+    expect(result.id).toBe(suggestionId);
+  });
+
+  it("rejects begin_branch_suggestion_ai_run result without a UUID id", () => {
+    expect(() =>
+      beginBranchSuggestionAiRunResultSchema.parse({ id: "not-a-uuid" }),
+    ).toThrow();
   });
 });

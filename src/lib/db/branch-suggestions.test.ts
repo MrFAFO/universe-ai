@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BranchSuggestionV1 } from "@/lib/ai/branch-suggestion";
 import {
   BranchSuggestionPayloadError,
+  beginBranchSuggestionAiRun,
+  classifyBranchSuggestionAcquisitionError,
   classifyBranchSuggestionPersistenceError,
+  GenerationInProgressError,
   getBranchSuggestionById,
   listPendingBranchSuggestionsForConversation,
   mapDbBranchSuggestionRow,
@@ -70,6 +73,7 @@ function createQueryBuilder(result: QueryResult) {
 
 const mockFrom = vi.fn();
 const mockReplaceRpc = vi.fn();
+const mockBeginRpc = vi.fn();
 
 vi.mock("@/lib/db/client", () => ({
   createSupabaseServerClient: () => ({
@@ -79,6 +83,7 @@ vi.mock("@/lib/db/client", () => ({
 
 vi.mock("@/lib/db/rpc", () => ({
   replacePendingBranchSuggestion: (...args: unknown[]) => mockReplaceRpc(...args),
+  beginBranchSuggestionAiRun: (...args: unknown[]) => mockBeginRpc(...args),
 }));
 
 describe("mapDbBranchSuggestionRow", () => {
@@ -124,6 +129,130 @@ describe("mapDbBranchSuggestionRow", () => {
     expect(() =>
       mapDbBranchSuggestionRow(makeDbRow({ ai_run_id: null })),
     ).toThrow(BranchSuggestionPayloadError);
+  });
+});
+
+describe("classifyBranchSuggestionAcquisitionError", () => {
+  it("maps explicit generation_in_progress RPC messages", () => {
+    expect(() =>
+      classifyBranchSuggestionAcquisitionError({
+        message: "generation_in_progress",
+      }),
+    ).toThrow(GenerationInProgressError);
+  });
+
+  it("maps structure_already_exists RPC messages", () => {
+    expect(() =>
+      classifyBranchSuggestionAcquisitionError({
+        message: "structure_already_exists",
+      }),
+    ).toThrow(StructureAlreadyExistsError);
+  });
+
+  it("maps PostgreSQL 23505 for the running-run index in message to generation_in_progress", () => {
+    expect(() =>
+      classifyBranchSuggestionAcquisitionError({
+        message:
+          'duplicate key value violates unique constraint "ai_runs_one_running_branch_suggestion_per_conversation_idx"',
+        code: "23505",
+      }),
+    ).toThrow(GenerationInProgressError);
+  });
+
+  it("maps PostgreSQL 23505 for the running-run index in details to generation_in_progress", () => {
+    expect(() =>
+      classifyBranchSuggestionAcquisitionError({
+        message: "duplicate key value violates unique constraint",
+        details:
+          'Key (conversation_id)=(cccccccc-cccc-4ccc-8ccc-cccccccccccc) already exists on index "ai_runs_one_running_branch_suggestion_per_conversation_idx".',
+        code: "23505",
+      }),
+    ).toThrow(GenerationInProgressError);
+  });
+
+  it("maps PostgreSQL 23505 for another unique constraint to DatabaseError", () => {
+    expect(() =>
+      classifyBranchSuggestionAcquisitionError({
+        message:
+          'duplicate key value violates unique constraint "branch_suggestions_ai_run_id_key"',
+        code: "23505",
+      }),
+    ).toThrow(DatabaseError);
+  });
+
+  it("maps unknown database failures to DatabaseError", () => {
+    expect(() =>
+      classifyBranchSuggestionAcquisitionError({
+        message: "connection failed",
+        code: "08006",
+      }),
+    ).toThrow(DatabaseError);
+  });
+});
+
+describe("beginBranchSuggestionAiRun", () => {
+  beforeEach(() => {
+    mockBeginRpc.mockReset();
+  });
+
+  it("calls the acquisition RPC with conversation id, model, and schema version", async () => {
+    mockBeginRpc.mockResolvedValue({ id: aiRunId });
+
+    const result = await beginBranchSuggestionAiRun({
+      conversationId,
+      model: "gpt-test",
+      schemaVersion: 1,
+    });
+
+    expect(mockBeginRpc).toHaveBeenCalledWith({
+      conversationId,
+      model: "gpt-test",
+      schemaVersion: 1,
+    });
+    expect(result).toEqual({ id: aiRunId });
+  });
+
+  it("classifies generation_in_progress from the RPC layer", async () => {
+    mockBeginRpc.mockRejectedValue({
+      message: "generation_in_progress",
+    });
+
+    await expect(
+      beginBranchSuggestionAiRun({
+        conversationId,
+        model: "gpt-test",
+        schemaVersion: 1,
+      }),
+    ).rejects.toThrow(GenerationInProgressError);
+  });
+
+  it("classifies structure_already_exists from the RPC layer", async () => {
+    mockBeginRpc.mockRejectedValue({
+      message: "structure_already_exists",
+    });
+
+    await expect(
+      beginBranchSuggestionAiRun({
+        conversationId,
+        model: "gpt-test",
+        schemaVersion: 1,
+      }),
+    ).rejects.toThrow(StructureAlreadyExistsError);
+  });
+
+  it("surfaces unknown database failures as DatabaseError", async () => {
+    mockBeginRpc.mockRejectedValue({
+      message: "connection failed",
+      code: "08006",
+    });
+
+    await expect(
+      beginBranchSuggestionAiRun({
+        conversationId,
+        model: "gpt-test",
+        schemaVersion: 1,
+      }),
+    ).rejects.toThrow(DatabaseError);
   });
 });
 
