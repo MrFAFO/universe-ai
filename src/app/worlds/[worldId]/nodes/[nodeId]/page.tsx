@@ -1,16 +1,16 @@
 import { notFound } from "next/navigation";
-import {
-  RootPlanningChat,
-  type RootPlanningChatMessage,
-} from "@/components/chat/RootPlanningChat";
+import { RootPlanningChat } from "@/components/chat/RootPlanningChat";
 import { AppShell } from "@/components/shell/AppShell";
 import { DatabaseErrorState } from "@/components/universe/DatabaseErrorState";
+import { mapDbMessagesToRootPlanningChatMessages } from "@/lib/chat/root-planning-messages";
+import { mapPendingSuggestionToDto } from "@/lib/chat/root-planning-page-data";
 import {
   RootPlanningNotFoundError,
   listConversationMessages,
   resolveRootPlanningConversation,
   type RootPlanningContext,
 } from "@/lib/db/chat";
+import { listPendingBranchSuggestionsForConversation } from "@/lib/db/branch-suggestions";
 import { PUBLIC_CHAT_ERROR_MESSAGE } from "@/lib/db/errors";
 import {
   nodeIdParamSchema,
@@ -35,7 +35,8 @@ export default async function RootPlanningChatPage({
   }
 
   let context: RootPlanningContext | null = null;
-  let visibleMessages: RootPlanningChatMessage[] | null = null;
+  let initialMessages = null;
+  let initialSuggestion = null;
   let databaseError = false;
 
   try {
@@ -43,19 +44,14 @@ export default async function RootPlanningChatPage({
       parsedWorldId.data,
       parsedNodeId.data,
     );
-    const persistedMessages = await listConversationMessages(
-      context.conversation.id,
-    );
-    visibleMessages = persistedMessages
-      .filter(
-        (message) => message.role === "user" || message.role === "assistant",
-      )
-      .map((message) => ({
-        id: message.id,
-        role: message.role as "user" | "assistant",
-        content: message.content,
-        status: "complete" as const,
-      }));
+
+    const [persistedMessages, pendingSuggestions] = await Promise.all([
+      listConversationMessages(context.conversation.id),
+      listPendingBranchSuggestionsForConversation(context.conversation.id),
+    ]);
+
+    initialMessages = mapDbMessagesToRootPlanningChatMessages(persistedMessages);
+    initialSuggestion = mapPendingSuggestionToDto(pendingSuggestions);
   } catch (error) {
     if (error instanceof RootPlanningNotFoundError) {
       notFound();
@@ -77,7 +73,7 @@ export default async function RootPlanningChatPage({
     );
   }
 
-  if (!context || !visibleMessages) {
+  if (!context || !initialMessages) {
     notFound();
   }
 
@@ -89,7 +85,8 @@ export default async function RootPlanningChatPage({
           worldName={context.world.name}
           nodeId={context.node.id}
           nodeTitle={context.node.title}
-          initialMessages={visibleMessages}
+          initialMessages={initialMessages}
+          initialSuggestion={initialSuggestion}
         />
       </div>
     </AppShell>

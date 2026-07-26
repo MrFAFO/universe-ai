@@ -93,12 +93,6 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 - D2 generation-and-persistence orchestration
 - D3 Commit 1 GET/POST Branch Suggestions API
 
-**Locally implemented but not committed (requires refactor per approved architecture):**
-
-- D3 Commit 2 Branch Suggestions UI prototype
-- Generate World Structure button, pending proposal loading, explicit POST generation, proposal review display
-- Client helpers, tests, and styles
-
 **Implemented in Stage D4.4:**
 
 - Single pending proposal invariant (`superseded` status, partial unique index, replacement RPC)
@@ -106,9 +100,15 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 - Bounded stale-run recovery for abandoned Branch Suggestion `ai_runs`
 - Branch Suggestion generation acquires its `ai_run` atomically through `begin_branch_suggestion_ai_run` before calling OpenAI
 
+**Implemented in Stage D5:**
+
+- D5 chronological timeline integration — Root Planning page loads messages and the singular pending proposal in parallel from the database; `initialSuggestion: BranchSuggestionDto | null` is passed to the client (no mount-time GET, no pending array)
+- Messages expose `createdAt` for timeline ordering; `buildRootPlanningTimeline` merges messages and the pending proposal chronologically with stable tie handling
+- `BranchSuggestionCard` is a presentational timeline item; Generate/Regenerate lives in the chat header with mutual disable against chat streaming
+- Client helper handles both safe error bodies and conflict-only `{ code }` payloads
+
 **Approved target not yet implemented:**
 
-- Chronological timeline integration (`BranchSuggestionCard` as timeline item)
 - Code-owned domain-neutral Root Planning prompt and World brief
 - Readiness assessment and Discovery (`StructureAssessmentV1`)
 - Approval and rejection UI and API
@@ -126,21 +126,21 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 
 **Latest automated verification:**
 
-- 147 tests passed across 14 test files
-- Lint passed with only the existing UniverseHero `<img>` warning
+- 200 tests passed across 18 test files
+- Lint passed with pre-existing UniverseHero `<img>` warning only
 - Production build passed
 - Branch Suggestions API route appeared in the build output
 
 **Manual browser acceptance (local D3 UI prototype):**
 
 - Initial loading, explicit generation, proposal persistence and display, and no automatic node creation all worked
-- The prototype is **not accepted for commit** — see `docs/ARCHITECTURE.md` (Uncommitted D3 UI disposition)
+- The original D3 UI prototype was not accepted as-is; the D5 refactor supersedes it while preserving the reusable generation and proposal-card work.
 
-**Known prototype issues (addressed by approved architecture, not yet implemented):**
+**Prototype status after D5:**
 
-- Multiple pending proposals allowed per conversation
-- Proposal panel breaks chronological message flow
-- Root Planning behaves too much like a generic chatbot
+- Single pending proposal is enforced by the server, and the UI uses singular state
+- The proposal is integrated chronologically as a `BranchSuggestionCard` timeline item
+- Root Planning behaves too much like a generic chatbot (D6 target)
 
 ## Development Environment Note
 
@@ -153,18 +153,14 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 - Stage D architecture approved.
 - Documentation updated: `docs/ARCHITECTURE.md` created; `PROJECT.md`, `UI.md`, `CURRENT_STATE.md`, and `AGENTS.md` updated.
 - Stage D1–D3 Commit 1 committed and pushed on `stage-d-branch-suggestions`.
-- Local D3 Commit 2 UI prototype exists but is blocked from commit pending refactor per approved architecture.
-- Automated verification: 147 tests, lint (one pre-existing warning), production build all pass.
+- D5 timeline integration completed: server-side pending load, chronological `BranchSuggestionCard`, chat-level Generate/Regenerate; mount-time GET and pending array removed.
+- Automated verification: 200 tests, lint (one pre-existing warning), production build all pass.
 
 ## Next Task
 
 Resume Stage D implementation per the phased plan in `docs/ARCHITECTURE.md`:
 
-1. Phase D4 — single pending proposal (migrations, replacement RPC, route updates)
-2. Phase D5 — chronological timeline integration and UI refactor
-3. Phase D6 — code-owned prompt, World brief, domain-neutral instructions
-4. Phase D7 — readiness assessment and Discovery
-5. Phase D8 — approval, rejection, map refresh
-6. Optional — Generate with Assumptions
-
-Do not commit the current D3 UI prototype as-is.
+1. Phase D6 — code-owned prompt, World brief, domain-neutral instructions
+2. Phase D7 — readiness assessment and Discovery
+3. Phase D8 — approval, rejection, map refresh
+4. Optional — Generate with Assumptions

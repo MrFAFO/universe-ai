@@ -1642,6 +1642,13 @@ body {
   background: rgba(15, 22, 41, 0.55);
 }
 
+.root-planning-chat__header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .root-planning-chat__back {
   display: inline-flex;
   align-items: center;
@@ -1680,6 +1687,52 @@ body {
   margin-top: 0.2rem;
   font-size: 0.875rem;
   color: var(--text-secondary);
+}
+
+.root-planning-chat__generate {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(124, 58, 237, 0.28);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.95rem;
+  background: rgba(124, 58, 237, 0.14);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.root-planning-chat__generate:hover:not(:disabled) {
+  background: rgba(124, 58, 237, 0.22);
+  border-color: rgba(124, 58, 237, 0.42);
+}
+
+.root-planning-chat__generate:focus-visible {
+  outline: 2px solid rgba(124, 58, 237, 0.55);
+  outline-offset: 2px;
+}
+
+.root-planning-chat__generate:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.root-planning-chat__generation-status {
+  margin-top: 0.85rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.root-planning-chat__generation-error {
+  margin-top: 0.65rem;
+  font-size: 0.8125rem;
+  color: #fbbf24;
 }
 
 .root-planning-chat__messages {
@@ -1776,6 +1829,11 @@ body {
   color: var(--text-secondary);
 }
 
+.root-planning-chat__timeline-item--suggestion {
+  width: 100%;
+  max-width: 100%;
+}
+
 .root-planning-chat__composer {
   flex-shrink: 0;
   display: grid;
@@ -1863,6 +1921,15 @@ body {
     padding-inline: 1rem;
   }
 
+  .root-planning-chat__header-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .root-planning-chat__generate {
+    justify-content: center;
+  }
+
   .root-planning-chat__message {
     max-width: 100%;
   }
@@ -1875,5 +1942,110 @@ body {
   .root-planning-chat__send {
     justify-content: center;
   }
+}
+
+/* Branch suggestion timeline card */
+.branch-suggestion-card {
+  display: grid;
+  gap: 0.75rem;
+  width: 100%;
+  border: 1px solid rgba(124, 58, 237, 0.22);
+  border-radius: var(--radius-lg);
+  padding: 0.95rem 1rem;
+  background: rgba(124, 58, 237, 0.06);
+  box-shadow: var(--inner-glow);
+}
+
+.branch-suggestion-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.branch-suggestion-card__status-label {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #bfdbfe;
+}
+
+.branch-suggestion-card__timestamp {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.branch-suggestion-card__notice {
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.branch-suggestion-card__rationale {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.branch-suggestion-card__node-count {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.branch-suggestion-card__nodes {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.branch-suggestion-card__node {
+  display: grid;
+  gap: 0.35rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0.75rem 0.85rem;
+  background: rgba(15, 22, 41, 0.55);
+}
+
+.branch-suggestion-card__node-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.branch-suggestion-card__node-description,
+.branch-suggestion-card__node-goal {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.branch-suggestion-card__node-goal {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.branch-suggestion-card__node-goal-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
