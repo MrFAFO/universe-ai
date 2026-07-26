@@ -5,6 +5,10 @@ import {
   type BranchSuggestionV1,
 } from "@/lib/ai/branch-suggestion";
 import {
+  ROOT_PLANNING_SYSTEM_PROMPT,
+  type RootPlanningPromptContext,
+} from "@/lib/ai/prompt";
+import {
   BRANCH_SUGGESTION_FORMAT_NAME,
   MAX_SUGGESTION_OUTPUT_TOKENS,
   buildSuggestionParseRequestParams,
@@ -24,6 +28,19 @@ function makeMessage(
     content: "Message content",
     ai_run_id: null,
     created_at: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function makePromptContext(
+  overrides: Partial<RootPlanningPromptContext> = {},
+): RootPlanningPromptContext {
+  return {
+    worldName: "Test World",
+    worldDescription: "A planning world",
+    rootTitle: "Root",
+    rootGoal: "Define the world",
+    currentNodeTitles: ["Context"],
     ...overrides,
   };
 }
@@ -95,12 +112,17 @@ function createMockDeps(
   };
 }
 
+const sampleMessages = [
+  makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
+  makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
+];
+
 describe("buildSuggestionParseRequestParams", () => {
   it("requests the installed SDK native structured-output format", () => {
     const params = buildSuggestionParseRequestParams(
       "gpt-test",
       [
-        { role: "system", content: "System" },
+        { role: "system", content: "Code-owned system" },
         { role: "user", content: "Hello" },
         { role: "user", content: BRANCH_SUGGESTION_GENERATION_INSTRUCTION },
       ],
@@ -115,7 +137,7 @@ describe("buildSuggestionParseRequestParams", () => {
       strict: true,
     });
     expect(params.input).toEqual([
-      { role: "system", content: "System" },
+      { role: "system", content: "Code-owned system" },
       { role: "user", content: "Hello" },
       { role: "user", content: BRANCH_SUGGESTION_GENERATION_INSTRUCTION },
     ]);
@@ -123,33 +145,28 @@ describe("buildSuggestionParseRequestParams", () => {
 });
 
 describe("generateBranchSuggestion", () => {
-  it("builds the request from persisted history through the existing input builder", async () => {
+  it("builds the request from the code-owned Root Planning input", async () => {
     const deps = createMockDeps();
-    const messages = [
-      makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
-      makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
-    ];
+    const promptContext = makePromptContext({ worldName: "Acme World" });
 
-    await generateBranchSuggestion(messages, { deps });
+    await generateBranchSuggestion(sampleMessages, promptContext, { deps });
 
     expect(deps.parseCalls).toHaveLength(1);
-    expect(deps.parseCalls[0]?.params.input).toEqual([
-      { role: "system", content: "System" },
-      { role: "user", content: "Hello" },
-      { role: "user", content: BRANCH_SUGGESTION_GENERATION_INSTRUCTION },
-    ]);
+    const input = deps.parseCalls[0]?.params.input;
+    expect(input?.[0]).toMatchObject({ role: "system" });
+    expect(input?.[0]?.content).toContain(ROOT_PLANNING_SYSTEM_PROMPT);
+    expect(input?.[0]?.content).toContain('"worldName": "Acme World"');
+    expect(input?.map((item) => item.content)).not.toContain("System");
+    expect(input?.at(-1)).toEqual({
+      role: "user",
+      content: BRANCH_SUGGESTION_GENERATION_INSTRUCTION,
+    });
   });
 
   it("uses the configured model", async () => {
     const deps = createMockDeps();
 
-    await generateBranchSuggestion(
-      [
-        makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
-        makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
-      ],
-      { deps },
-    );
+    await generateBranchSuggestion(sampleMessages, makePromptContext(), { deps });
 
     expect(deps.getModel).toHaveBeenCalledTimes(1);
     expect(deps.parseCalls[0]?.params.model).toBe("gpt-test");
@@ -158,13 +175,7 @@ describe("generateBranchSuggestion", () => {
   it("uses store false and max_output_tokens 1024", async () => {
     const deps = createMockDeps();
 
-    await generateBranchSuggestion(
-      [
-        makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
-        makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
-      ],
-      { deps },
-    );
+    await generateBranchSuggestion(sampleMessages, makePromptContext(), { deps });
 
     expect(deps.parseCalls[0]?.params.store).toBe(false);
     expect(deps.parseCalls[0]?.params.max_output_tokens).toBe(1024);
@@ -174,10 +185,8 @@ describe("generateBranchSuggestion", () => {
     const deps = createMockDeps();
 
     const result = await generateBranchSuggestion(
-      [
-        makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
-        makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
-      ],
+      sampleMessages,
+      makePromptContext(),
       { deps },
     );
 
@@ -198,10 +207,8 @@ describe("generateBranchSuggestion", () => {
     });
 
     const result = await generateBranchSuggestion(
-      [
-        makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
-        makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
-      ],
+      sampleMessages,
+      makePromptContext(),
       { deps },
     );
 
@@ -220,10 +227,8 @@ describe("generateBranchSuggestion", () => {
     });
 
     const result = await generateBranchSuggestion(
-      [
-        makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
-        makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
-      ],
+      sampleMessages,
+      makePromptContext(),
       { deps },
     );
 
@@ -247,10 +252,8 @@ describe("generateBranchSuggestion", () => {
     });
 
     const result = await generateBranchSuggestion(
-      [
-        makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
-        makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
-      ],
+      sampleMessages,
+      makePromptContext(),
       { deps },
     );
 
@@ -278,10 +281,8 @@ describe("generateBranchSuggestion", () => {
     });
 
     const result = await generateBranchSuggestion(
-      [
-        makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
-        makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
-      ],
+      sampleMessages,
+      makePromptContext(),
       { deps },
     );
 
@@ -301,10 +302,8 @@ describe("generateBranchSuggestion", () => {
     });
 
     const result = await generateBranchSuggestion(
-      [
-        makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
-        makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
-      ],
+      sampleMessages,
+      makePromptContext(),
       { deps },
     );
 
@@ -322,10 +321,8 @@ describe("generateBranchSuggestion", () => {
     });
 
     const result = await generateBranchSuggestion(
-      [
-        makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
-        makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
-      ],
+      sampleMessages,
+      makePromptContext(),
       { deps },
     );
 
@@ -341,10 +338,8 @@ describe("generateBranchSuggestion", () => {
     controller.abort();
 
     const result = await generateBranchSuggestion(
-      [
-        makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
-        makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
-      ],
+      sampleMessages,
+      makePromptContext(),
       { deps, signal: controller.signal },
     );
 
@@ -360,10 +355,8 @@ describe("generateBranchSuggestion", () => {
     });
 
     const result = await generateBranchSuggestion(
-      [
-        makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
-        makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
-      ],
+      sampleMessages,
+      makePromptContext(),
       { deps },
     );
 
@@ -377,13 +370,7 @@ describe("generateBranchSuggestion", () => {
       }),
     });
 
-    await generateBranchSuggestion(
-      [
-        makeMessage({ id: "m-1", role: "system", ordinal: 1, content: "System" }),
-        makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
-      ],
-      { deps },
-    );
+    await generateBranchSuggestion(sampleMessages, makePromptContext(), { deps });
 
     expect(deps.parseStructuredResponse).toHaveBeenCalledTimes(1);
   });

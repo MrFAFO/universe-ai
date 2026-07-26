@@ -107,9 +107,14 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 - `BranchSuggestionCard` is a presentational timeline item; Generate/Regenerate lives in the chat header with mutual disable against chat streaming
 - Client helper handles both safe error bodies and conflict-only `{ code }` payloads
 
+**Implemented in Stage D6:**
+
+- D6 code-owned Root Planning prompt — `ROOT_PLANNING_SYSTEM_PROMPT` replaces persisted system rows in model input; persisted system messages remain stored but are excluded
+- Compact World brief shared by Root Planning chat and Branch Suggestion generation — World name/description, Root title/goal, and up to 20 current non-root Node titles (`listWorldNodeTitles`)
+- Domain-neutral Branch Suggestion generation instruction; no Readiness or Discovery behavior
+
 **Approved target not yet implemented:**
 
-- Code-owned domain-neutral Root Planning prompt and World brief
 - Readiness assessment and Discovery (`StructureAssessmentV1`)
 - Approval and rejection UI and API
 - Map refresh after approval
@@ -126,7 +131,7 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 
 **Latest automated verification:**
 
-- 200 tests passed across 18 test files
+- 215 tests passed across 19 test files
 - Lint passed with pre-existing UniverseHero `<img>` warning only
 - Production build passed
 - Branch Suggestions API route appeared in the build output
@@ -140,7 +145,7 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 
 - Single pending proposal is enforced by the server, and the UI uses singular state
 - The proposal is integrated chronologically as a `BranchSuggestionCard` timeline item
-- Root Planning behaves too much like a generic chatbot (D6 target)
+- Root Planning prompt ownership moved to code in D6 (domain-neutral instructions)
 
 ## Development Environment Note
 
@@ -154,13 +159,13 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 - Documentation updated: `docs/ARCHITECTURE.md` created; `PROJECT.md`, `UI.md`, `CURRENT_STATE.md`, and `AGENTS.md` updated.
 - Stage D1–D3 Commit 1 committed and pushed on `stage-d-branch-suggestions`.
 - D5 timeline integration completed: server-side pending load, chronological `BranchSuggestionCard`, chat-level Generate/Regenerate; mount-time GET and pending array removed.
-- Automated verification: 200 tests, lint (one pre-existing warning), production build all pass.
+- D6 code-owned Root Planning prompt and compact World brief completed: persisted system rows excluded from model input; chat and Branch Suggestion share the same brief and domain-neutral instructions.
+- Automated verification: 215 tests, lint (one pre-existing warning), production build all pass.
 
 ## Next Task
 
 Resume Stage D implementation per the phased plan in `docs/ARCHITECTURE.md`:
 
-1. Phase D6 — code-owned prompt, World brief, domain-neutral instructions
-2. Phase D7 — readiness assessment and Discovery
-3. Phase D8 — approval, rejection, map refresh
-4. Optional — Generate with Assumptions
+1. Phase D7 — readiness assessment and Discovery
+2. Phase D8 — approval, rejection, map refresh
+3. Optional — Generate with Assumptions

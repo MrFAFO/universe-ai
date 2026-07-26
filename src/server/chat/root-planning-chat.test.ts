@@ -1,7 +1,9 @@
 import type { ResponseStreamEvent } from "openai/resources/responses/responses";
 import { describe, expect, it, vi } from "vitest";
+import { ROOT_PLANNING_SYSTEM_PROMPT } from "@/lib/ai/prompt";
 import { PUBLIC_CHAT_STREAM_ERROR_MESSAGE } from "@/lib/ai/stream-protocol";
 import type { RootPlanningContext } from "@/lib/db/chat";
+import { DatabaseError } from "@/lib/db/errors";
 import {
   createRootPlanningChatStream,
   type RootPlanningChatDeps,
@@ -174,6 +176,10 @@ function createMockDeps(
         }),
       ];
     }),
+    listWorldNodeTitles: vi.fn(async () => {
+      calls.push("listWorldNodeTitles");
+      return ["Context"];
+    }),
     insertUserMessage: vi.fn(async (_conversationId, content) => {
       calls.push("insertUser");
       return makeMessage({
@@ -238,9 +244,54 @@ describe("createRootPlanningChatStream", () => {
     expect(deps.calls.indexOf("list")).toBeGreaterThan(
       deps.calls.indexOf("insertUser"),
     );
+    expect(deps.calls.indexOf("listWorldNodeTitles")).toBeGreaterThan(
+      deps.calls.indexOf("insertUser"),
+    );
     expect(deps.listConversationMessages).toHaveBeenCalledWith(conversationId);
+    expect(deps.listWorldNodeTitles).toHaveBeenCalledWith(worldId);
     expect(deps.createResponseStream).toHaveBeenCalledTimes(1);
     expect(deps.insertUserMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("builds OpenAI input from the code-owned system prompt and World brief", async () => {
+    const deps = createMockDeps();
+    const stream = await createRootPlanningChatStream(
+      { worldId, nodeId, content: "Hello" },
+      deps,
+    );
+
+    await readNdjsonStream(stream);
+
+    const call = vi.mocked(deps.createResponseStream).mock.calls[0]?.[0];
+    expect(call?.input[0]).toMatchObject({ role: "system" });
+    expect(call?.input[0]?.content).toContain(ROOT_PLANNING_SYSTEM_PROMPT);
+    expect(call?.input[0]?.content).toContain('"worldName": "Test World"');
+    expect(call?.input[0]?.content).toContain('"rootTitle": "Root"');
+    expect(call?.input[0]?.content).toContain('"currentNodeTitles": [\n    "Context"\n  ]');
+    expect(call?.input.map((item) => item.content)).not.toContain("System prompt");
+    expect(call?.input.slice(1)).toEqual([
+      { role: "user", content: "Hello" },
+    ]);
+  });
+
+  it("does not create an ai_run when Node-title loading fails", async () => {
+    const deps = createMockDeps({
+      listWorldNodeTitles: vi.fn(async () => {
+        throw new DatabaseError("node title query failed");
+      }),
+    });
+
+    const stream = await createRootPlanningChatStream(
+      { worldId, nodeId, content: "Hello" },
+      deps,
+    );
+    const events = await readNdjsonStream(stream);
+
+    expect(events).toEqual([
+      { type: "error", message: PUBLIC_CHAT_STREAM_ERROR_MESSAGE },
+    ]);
+    expect(deps.createAiRun).not.toHaveBeenCalled();
+    expect(deps.createResponseStream).not.toHaveBeenCalled();
   });
 
   it("streams ordered deltas, persists one assistant message, and completes the run once", async () => {

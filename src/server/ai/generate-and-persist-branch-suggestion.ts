@@ -6,6 +6,7 @@ import {
   completeAiRun,
   failAiRun,
   listConversationMessages,
+  listWorldNodeTitles,
   resolveRootPlanningConversation,
   RootPlanningNotFoundError,
   type CompleteAiRunInput,
@@ -21,6 +22,7 @@ import {
   type PersistedBranchSuggestion,
 } from "@/lib/db/branch-suggestions";
 import { DatabaseError } from "@/lib/db/errors";
+import type { RootPlanningPromptContext } from "@/lib/ai/prompt";
 import type { DbBranchSuggestion, DbMessage } from "@/types/db";
 import {
   generateBranchSuggestion,
@@ -52,6 +54,7 @@ export interface GenerateAndPersistBranchSuggestionDeps {
     nodeId: string,
   ): Promise<RootPlanningContext>;
   listConversationMessages(conversationId: string): Promise<DbMessage[]>;
+  listWorldNodeTitles(worldId: string): Promise<string[]>;
   getModel(): string;
   beginBranchSuggestionAiRun(input: {
     conversationId: string;
@@ -62,6 +65,7 @@ export interface GenerateAndPersistBranchSuggestionDeps {
   failAiRun(aiRunId: string, errorSummary: string): Promise<void>;
   generateBranchSuggestion(
     messages: DbMessage[],
+    promptContext: RootPlanningPromptContext,
     options?: { signal?: AbortSignal },
   ): Promise<GenerateBranchSuggestionResult>;
   replacePendingBranchSuggestion(input: {
@@ -76,6 +80,7 @@ export function createDefaultGenerateAndPersistBranchSuggestionDeps(): GenerateA
   return {
     resolveRootPlanningConversation,
     listConversationMessages,
+    listWorldNodeTitles,
     getModel: getOpenAIModel,
     beginBranchSuggestionAiRun,
     completeAiRun,
@@ -135,10 +140,13 @@ export async function generateAndPersistBranchSuggestion(
   }
 
   let messages: DbMessage[];
+  let currentNodeTitles: string[];
+
   try {
-    messages = await resolvedDeps.listConversationMessages(
-      context.conversation.id,
-    );
+    [messages, currentNodeTitles] = await Promise.all([
+      resolvedDeps.listConversationMessages(context.conversation.id),
+      resolvedDeps.listWorldNodeTitles(context.world.id),
+    ]);
   } catch (error) {
     if (error instanceof DatabaseError) {
       return { ok: false, reason: "persistence_error" };
@@ -146,6 +154,14 @@ export async function generateAndPersistBranchSuggestion(
 
     throw error;
   }
+
+  const promptContext: RootPlanningPromptContext = {
+    worldName: context.world.name,
+    worldDescription: context.world.description,
+    rootTitle: context.node.title,
+    rootGoal: context.node.goal,
+    currentNodeTitles,
+  };
 
   const model = resolvedDeps.getModel();
 
@@ -172,9 +188,13 @@ export async function generateAndPersistBranchSuggestion(
     throw error;
   }
 
-  const generation = await resolvedDeps.generateBranchSuggestion(messages, {
-    signal: params.signal,
-  });
+  const generation = await resolvedDeps.generateBranchSuggestion(
+    messages,
+    promptContext,
+    {
+      signal: params.signal,
+    },
+  );
 
   if (!generation.ok) {
     await safeFailRun(resolvedDeps, aiRun.id, generation.reason);

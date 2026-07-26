@@ -15,9 +15,11 @@ import {
   insertAssistantMessage,
   insertUserMessage,
   listConversationMessages,
+  listWorldNodeTitles,
   resolveRootPlanningConversation,
   type RootPlanningContext,
 } from "@/lib/db/chat";
+import { DatabaseError } from "@/lib/db/errors";
 import type { DbMessage } from "@/types/db";
 
 export const MAX_OUTPUT_TOKENS = 2048;
@@ -30,6 +32,7 @@ export interface RootPlanningChatDeps {
     nodeId: string,
   ): Promise<RootPlanningContext>;
   listConversationMessages(conversationId: string): Promise<DbMessage[]>;
+  listWorldNodeTitles(worldId: string): Promise<string[]>;
   insertUserMessage(conversationId: string, content: string): Promise<DbMessage>;
   insertAssistantMessage(
     conversationId: string,
@@ -63,6 +66,7 @@ export function createDefaultRootPlanningChatDeps(): RootPlanningChatDeps {
   return {
     resolveRootPlanningConversation,
     listConversationMessages,
+    listWorldNodeTitles,
     insertUserMessage,
     insertAssistantMessage,
     createAiRun,
@@ -139,8 +143,40 @@ export async function createRootPlanningChatStream(
   );
 
   await deps.insertUserMessage(context.conversation.id, params.content);
-  const messages = await deps.listConversationMessages(context.conversation.id);
-  const input = buildResponsesInput(messages);
+
+  let messages: DbMessage[];
+  let currentNodeTitles: string[];
+
+  try {
+    [messages, currentNodeTitles] = await Promise.all([
+      deps.listConversationMessages(context.conversation.id),
+      deps.listWorldNodeTitles(context.world.id),
+    ]);
+  } catch (error) {
+    if (error instanceof DatabaseError) {
+      return new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            encodeNdjsonBytes({
+              type: "error",
+              message: PUBLIC_CHAT_STREAM_ERROR_MESSAGE,
+            }),
+          );
+          controller.close();
+        },
+      });
+    }
+
+    throw error;
+  }
+
+  const input = buildResponsesInput(messages, {
+    worldName: context.world.name,
+    worldDescription: context.world.description,
+    rootTitle: context.node.title,
+    rootGoal: context.node.goal,
+    currentNodeTitles,
+  });
   const model = deps.getModel();
   const aiRun = await deps.createAiRun(context.conversation.id, model);
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { BranchSuggestionV1 } from "@/lib/ai/branch-suggestion";
+import type { RootPlanningPromptContext } from "@/lib/ai/prompt";
 import { RootPlanningNotFoundError, type RootPlanningContext } from "@/lib/db/chat";
 import {
   GenerationInProgressError,
@@ -110,12 +111,17 @@ function createDeps(
   calls: {
     resolve: Array<{ worldId: string; nodeId: string }>;
     listMessages: string[];
+    listNodeTitles: string[];
     begin: Array<{
       conversationId: string;
       model: string;
       schemaVersion: 1;
     }>;
-    generate: Array<{ messages: DbMessage[]; signal?: AbortSignal }>;
+    generate: Array<{
+      messages: DbMessage[];
+      promptContext: RootPlanningPromptContext;
+      signal?: AbortSignal;
+    }>;
     replace: Array<Record<string, unknown>>;
     complete: Array<Record<string, unknown>>;
     fail: Array<{ aiRunId: string; summary: string }>;
@@ -124,12 +130,17 @@ function createDeps(
   const calls = {
     resolve: [] as Array<{ worldId: string; nodeId: string }>,
     listMessages: [] as string[],
+    listNodeTitles: [] as string[],
     begin: [] as Array<{
       conversationId: string;
       model: string;
       schemaVersion: 1;
     }>,
-    generate: [] as Array<{ messages: DbMessage[]; signal?: AbortSignal }>,
+    generate: [] as Array<{
+      messages: DbMessage[];
+      promptContext: RootPlanningPromptContext;
+      signal?: AbortSignal;
+    }>,
     replace: [] as Array<Record<string, unknown>>,
     complete: [] as Array<Record<string, unknown>>,
     fail: [] as Array<{ aiRunId: string; summary: string }>,
@@ -145,6 +156,10 @@ function createDeps(
       calls.listMessages.push(resolvedConversationId);
       return messages;
     }),
+    listWorldNodeTitles: vi.fn(async (resolvedWorldId) => {
+      calls.listNodeTitles.push(resolvedWorldId);
+      return ["Context"];
+    }),
     getModel: vi.fn(() => "gpt-test"),
     beginBranchSuggestionAiRun: vi.fn(async (input) => {
       calls.begin.push(input);
@@ -156,8 +171,12 @@ function createDeps(
     failAiRun: vi.fn(async (resolvedAiRunId, summary) => {
       calls.fail.push({ aiRunId: resolvedAiRunId, summary });
     }),
-    generateBranchSuggestion: vi.fn(async (loadedMessages, options) => {
-      calls.generate.push({ messages: loadedMessages, signal: options?.signal });
+    generateBranchSuggestion: vi.fn(async (loadedMessages, promptContext, options) => {
+      calls.generate.push({
+        messages: loadedMessages,
+        promptContext,
+        signal: options?.signal,
+      });
       return {
         ok: true as const,
         suggestion: validSuggestion,
@@ -192,7 +211,7 @@ describe("generateAndPersistBranchSuggestion", () => {
     expect(deps.beginBranchSuggestionAiRun).not.toHaveBeenCalled();
   });
 
-  it("loads history before acquiring the ai_run and generating", async () => {
+  it("loads messages and Node titles before acquiring the ai_run and generating", async () => {
     const deps = createDeps();
     const order: string[] = [];
 
@@ -201,8 +220,12 @@ describe("generateAndPersistBranchSuggestion", () => {
       return context;
     });
     deps.listConversationMessages = vi.fn(async () => {
-      order.push("list");
+      order.push("listMessages");
       return messages;
+    });
+    deps.listWorldNodeTitles = vi.fn(async () => {
+      order.push("listNodeTitles");
+      return ["Context"];
     });
     deps.beginBranchSuggestionAiRun = vi.fn(async () => {
       order.push("begin");
@@ -221,7 +244,46 @@ describe("generateAndPersistBranchSuggestion", () => {
 
     await generateAndPersistBranchSuggestion({ worldId, nodeId }, deps);
 
-    expect(order).toEqual(["resolve", "list", "begin", "generate"]);
+    expect(order).toEqual([
+      "resolve",
+      "listMessages",
+      "listNodeTitles",
+      "begin",
+      "generate",
+    ]);
+  });
+
+  it("passes World, Root, and Node-title prompt context into generation", async () => {
+    const deps = createDeps();
+
+    await generateAndPersistBranchSuggestion({ worldId, nodeId }, deps);
+
+    expect(deps.calls.generate[0]?.promptContext).toEqual({
+      worldName: "Test World",
+      worldDescription: "",
+      rootTitle: "Root",
+      rootGoal: "",
+      currentNodeTitles: ["Context"],
+    });
+  });
+
+  it("returns persistence_error when Node-title loading fails before acquisition", async () => {
+    const deps = createDeps({
+      listWorldNodeTitles: vi.fn(async () => {
+        throw new DatabaseError("node title query failed");
+      }),
+    });
+
+    const result = await generateAndPersistBranchSuggestion(
+      { worldId, nodeId },
+      deps,
+    );
+
+    expect(result).toEqual({ ok: false, reason: "persistence_error" });
+    expect(deps.beginBranchSuggestionAiRun).not.toHaveBeenCalled();
+    expect(deps.generateBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.failAiRun).not.toHaveBeenCalled();
+    expect(String(result)).not.toContain("node title query failed");
   });
 
   it("acquires an ai_run with conversation id, model, and schema version 1", async () => {

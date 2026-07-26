@@ -118,6 +118,24 @@ export async function resolveRootPlanningConversation(
   });
 }
 
+export async function listWorldNodeTitles(worldId: string): Promise<string[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("nodes")
+    .select("title")
+    .eq("world_id", worldId)
+    .neq("kind", "root")
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(20);
+
+  if (error) {
+    throw new DatabaseError(error.message);
+  }
+
+  return (data ?? []).map((row) => row.title as string);
+}
+
 export async function listConversationMessages(
   conversationId: string,
 ): Promise<DbMessage[]> {

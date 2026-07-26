@@ -9,6 +9,7 @@ import {
   type BranchSuggestionV1,
 } from "@/lib/ai/branch-suggestion";
 import { getOpenAIClient, getOpenAIModel } from "@/lib/ai/openai";
+import type { RootPlanningPromptContext } from "@/lib/ai/prompt";
 import type { DbMessage } from "@/types/db";
 
 export const MAX_SUGGESTION_OUTPUT_TOKENS = 1024;
@@ -124,6 +125,7 @@ function interpretParsedResponse(
 
 export async function generateBranchSuggestion(
   messages: DbMessage[],
+  promptContext: RootPlanningPromptContext,
   options?: {
     signal?: AbortSignal;
     deps?: GenerateBranchSuggestionDeps;
@@ -135,7 +137,7 @@ export async function generateBranchSuggestion(
     return { ok: false, reason: "aborted" };
   }
 
-  const input = buildBranchSuggestionInput(messages);
+  const input = buildBranchSuggestionInput(messages, promptContext);
   const requestParams = buildSuggestionParseRequestParams(deps.getModel(), input);
 
   try {
