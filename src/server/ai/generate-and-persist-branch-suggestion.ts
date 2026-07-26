@@ -2,9 +2,15 @@ import "server-only";
 
 import type { BranchSuggestionV1 } from "@/lib/ai/branch-suggestion";
 import { getOpenAIModel } from "@/lib/ai/openai";
+import type { RootPlanningPromptContext } from "@/lib/ai/prompt";
+import {
+  extractReadyProposal,
+  formatDiscoveryMessage,
+} from "@/lib/ai/structure-assessment";
 import {
   completeAiRun,
   failAiRun,
+  insertAssistantMessage,
   listConversationMessages,
   listWorldNodeTitles,
   resolveRootPlanningConversation,
@@ -22,17 +28,17 @@ import {
   type PersistedBranchSuggestion,
 } from "@/lib/db/branch-suggestions";
 import { DatabaseError } from "@/lib/db/errors";
-import type { RootPlanningPromptContext } from "@/lib/ai/prompt";
+import type { BranchSuggestionDiscoveryMessageDto } from "@/lib/ai/branch-suggestion-api";
 import type { DbBranchSuggestion, DbMessage } from "@/types/db";
 import {
-  generateBranchSuggestion,
-  type GenerateBranchSuggestionFailureReason,
-  type GenerateBranchSuggestionResult,
+  generateStructureAssessment,
+  type GenerateStructureAssessmentFailureReason,
+  type GenerateStructureAssessmentResult,
 } from "@/server/ai/generate-branch-suggestion";
 
 export type GenerateAndPersistBranchSuggestionFailureReason =
   | "root_planning_not_found"
-  | GenerateBranchSuggestionFailureReason
+  | GenerateStructureAssessmentFailureReason
   | "generation_in_progress"
   | "structure_already_exists"
   | "pending_proposal_exists"
@@ -41,7 +47,13 @@ export type GenerateAndPersistBranchSuggestionFailureReason =
 export type GenerateAndPersistBranchSuggestionResult =
   | {
       ok: true;
+      outcome: "proposal";
       suggestion: PersistedBranchSuggestion;
+    }
+  | {
+      ok: true;
+      outcome: "discovery";
+      message: BranchSuggestionDiscoveryMessageDto;
     }
   | {
       ok: false;
@@ -63,11 +75,16 @@ export interface GenerateAndPersistBranchSuggestionDeps {
   }): Promise<{ id: string }>;
   completeAiRun(aiRunId: string, input: CompleteAiRunInput): Promise<void>;
   failAiRun(aiRunId: string, errorSummary: string): Promise<void>;
-  generateBranchSuggestion(
+  insertAssistantMessage(
+    conversationId: string,
+    content: string,
+    aiRunId: string,
+  ): Promise<DbMessage>;
+  generateStructureAssessment(
     messages: DbMessage[],
     promptContext: RootPlanningPromptContext,
     options?: { signal?: AbortSignal },
-  ): Promise<GenerateBranchSuggestionResult>;
+  ): Promise<GenerateStructureAssessmentResult>;
   replacePendingBranchSuggestion(input: {
     conversationId: string;
     aiRunId: string;
@@ -85,7 +102,8 @@ export function createDefaultGenerateAndPersistBranchSuggestionDeps(): GenerateA
     beginBranchSuggestionAiRun,
     completeAiRun,
     failAiRun,
-    generateBranchSuggestion,
+    insertAssistantMessage,
+    generateStructureAssessment,
     replacePendingBranchSuggestion,
   };
 }
@@ -104,6 +122,17 @@ async function safeFailRun(
   } catch {
     // Best-effort finalization only.
   }
+}
+
+function toDiscoveryMessageDto(
+  message: DbMessage,
+): BranchSuggestionDiscoveryMessageDto {
+  return {
+    id: message.id,
+    role: "assistant",
+    content: message.content,
+    createdAt: message.created_at,
+  };
 }
 
 export async function generateAndPersistBranchSuggestion(
@@ -188,7 +217,7 @@ export async function generateAndPersistBranchSuggestion(
     throw error;
   }
 
-  const generation = await resolvedDeps.generateBranchSuggestion(
+  const generation = await resolvedDeps.generateStructureAssessment(
     messages,
     promptContext,
     {
@@ -201,13 +230,56 @@ export async function generateAndPersistBranchSuggestion(
     return { ok: false, reason: generation.reason };
   }
 
+  if (generation.assessment.readiness === "insufficient") {
+    const discoveryContent = formatDiscoveryMessage(
+      generation.assessment.questions ?? [],
+    );
+
+    let assistantMessage: DbMessage;
+    try {
+      assistantMessage = await resolvedDeps.insertAssistantMessage(
+        context.conversation.id,
+        discoveryContent,
+        aiRun.id,
+      );
+    } catch {
+      await safeFailRun(
+        resolvedDeps,
+        aiRun.id,
+        "Discovery message persistence failed.",
+      );
+      return { ok: false, reason: "persistence_error" };
+    }
+
+    try {
+      await resolvedDeps.completeAiRun(aiRun.id, {
+        openaiResponseId: generation.providerResponseId,
+        inputTokens: generation.inputTokens,
+        outputTokens: generation.outputTokens,
+      });
+    } catch {
+      await safeFailRun(
+        resolvedDeps,
+        aiRun.id,
+        "Branch suggestion ai_run completion failed.",
+      );
+      return { ok: false, reason: "persistence_error" };
+    }
+
+    return {
+      ok: true,
+      outcome: "discovery",
+      message: toDiscoveryMessageDto(assistantMessage),
+    };
+  }
+
   let persistedRow: DbBranchSuggestion;
   try {
     persistedRow = await resolvedDeps.replacePendingBranchSuggestion({
       conversationId: context.conversation.id,
       aiRunId: aiRun.id,
       schemaVersion: 1,
-      suggestion: generation.suggestion,
+      suggestion: extractReadyProposal(generation.assessment),
     });
   } catch (error) {
     if (error instanceof StructureAlreadyExistsError) {
@@ -253,6 +325,7 @@ export async function generateAndPersistBranchSuggestion(
 
   return {
     ok: true,
+    outcome: "proposal",
     suggestion: mapDbBranchSuggestionRow(persistedRow),
   };
 }

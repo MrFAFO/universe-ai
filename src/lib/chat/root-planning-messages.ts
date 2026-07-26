@@ -8,6 +8,17 @@ export type RootPlanningChatMessage = {
   createdAt: string;
 };
 
+export function appendRootPlanningMessageDeduped(
+  messages: ReadonlyArray<RootPlanningChatMessage>,
+  message: RootPlanningChatMessage,
+): RootPlanningChatMessage[] {
+  if (messages.some((existing) => existing.id === message.id)) {
+    return [...messages];
+  }
+
+  return [...messages, message];
+}
+
 export function mapDbMessagesToRootPlanningChatMessages(
   messages: DbMessage[],
 ): RootPlanningChatMessage[] {

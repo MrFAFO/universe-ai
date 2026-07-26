@@ -3,49 +3,49 @@ import "server-only";
 import { zodTextFormat } from "openai/helpers/zod";
 import type { ParsedResponse } from "openai/resources/responses/responses";
 import {
-  branchSuggestionV1Schema,
-  buildBranchSuggestionInput,
-  parseBranchSuggestion,
-  type BranchSuggestionV1,
-} from "@/lib/ai/branch-suggestion";
+  buildStructureAssessmentInput,
+  parseStructureAssessment,
+  structureAssessmentV1Schema,
+  type StructureAssessmentV1,
+} from "@/lib/ai/structure-assessment";
 import { getOpenAIClient, getOpenAIModel } from "@/lib/ai/openai";
 import type { RootPlanningPromptContext } from "@/lib/ai/prompt";
 import type { DbMessage } from "@/types/db";
 
-export const MAX_SUGGESTION_OUTPUT_TOKENS = 1024;
-export const BRANCH_SUGGESTION_FORMAT_NAME = "branch_suggestion";
+export const MAX_SUGGESTION_OUTPUT_TOKENS = 2048;
+export const STRUCTURE_ASSESSMENT_FORMAT_NAME = "structure_assessment";
 
-export type GenerateBranchSuggestionFailureReason =
+export type GenerateStructureAssessmentFailureReason =
   | "invalid_structured_output"
   | "provider_refusal"
   | "incomplete_response"
   | "provider_error"
   | "aborted";
 
-export type GenerateBranchSuggestionResult =
+export type GenerateStructureAssessmentResult =
   | {
       ok: true;
-      suggestion: BranchSuggestionV1;
+      assessment: StructureAssessmentV1;
       providerResponseId: string | null;
       inputTokens: number | null;
       outputTokens: number | null;
     }
   | {
       ok: false;
-      reason: GenerateBranchSuggestionFailureReason;
+      reason: GenerateStructureAssessmentFailureReason;
     };
 
-export interface GenerateBranchSuggestionDeps {
+export interface GenerateStructureAssessmentDeps {
   getModel(): string;
   parseStructuredResponse(
-    params: ReturnType<typeof buildSuggestionParseRequestParams>,
+    params: ReturnType<typeof buildStructureAssessmentParseRequestParams>,
     options: { signal?: AbortSignal },
-  ): Promise<ParsedResponse<BranchSuggestionV1>>;
+  ): Promise<ParsedResponse<StructureAssessmentV1>>;
 }
 
-export function buildSuggestionParseRequestParams(
+export function buildStructureAssessmentParseRequestParams(
   model: string,
-  input: ReturnType<typeof buildBranchSuggestionInput>,
+  input: ReturnType<typeof buildStructureAssessmentInput>,
 ) {
   return {
     model,
@@ -54,14 +54,14 @@ export function buildSuggestionParseRequestParams(
     max_output_tokens: MAX_SUGGESTION_OUTPUT_TOKENS,
     text: {
       format: zodTextFormat(
-        branchSuggestionV1Schema,
-        BRANCH_SUGGESTION_FORMAT_NAME,
+        structureAssessmentV1Schema,
+        STRUCTURE_ASSESSMENT_FORMAT_NAME,
       ),
     },
   };
 }
 
-export function createDefaultGenerateBranchSuggestionDeps(): GenerateBranchSuggestionDeps {
+export function createDefaultGenerateStructureAssessmentDeps(): GenerateStructureAssessmentDeps {
   const openai = getOpenAIClient();
 
   return {
@@ -95,8 +95,8 @@ function hasProviderRefusal(response: ParsedResponse<unknown>): boolean {
 }
 
 function interpretParsedResponse(
-  response: ParsedResponse<BranchSuggestionV1>,
-): GenerateBranchSuggestionResult {
+  response: ParsedResponse<StructureAssessmentV1>,
+): GenerateStructureAssessmentResult {
   if (hasProviderRefusal(response)) {
     return { ok: false, reason: "provider_refusal" };
   }
@@ -109,36 +109,40 @@ function interpretParsedResponse(
     return { ok: false, reason: "provider_error" };
   }
 
-  const parsed = parseBranchSuggestion(response.output_parsed);
+  const parsed = parseStructureAssessment(response.output_parsed);
   if (!parsed.ok) {
     return { ok: false, reason: "invalid_structured_output" };
   }
 
   return {
     ok: true,
-    suggestion: parsed.suggestion,
+    assessment: parsed.assessment,
     providerResponseId: typeof response.id === "string" ? response.id : null,
     inputTokens: response.usage?.input_tokens ?? null,
     outputTokens: response.usage?.output_tokens ?? null,
   };
 }
 
-export async function generateBranchSuggestion(
+export async function generateStructureAssessment(
   messages: DbMessage[],
   promptContext: RootPlanningPromptContext,
   options?: {
     signal?: AbortSignal;
-    deps?: GenerateBranchSuggestionDeps;
+    deps?: GenerateStructureAssessmentDeps;
   },
-): Promise<GenerateBranchSuggestionResult> {
-  const deps = options?.deps ?? createDefaultGenerateBranchSuggestionDeps();
+): Promise<GenerateStructureAssessmentResult> {
+  const deps =
+    options?.deps ?? createDefaultGenerateStructureAssessmentDeps();
 
   if (options?.signal?.aborted) {
     return { ok: false, reason: "aborted" };
   }
 
-  const input = buildBranchSuggestionInput(messages, promptContext);
-  const requestParams = buildSuggestionParseRequestParams(deps.getModel(), input);
+  const input = buildStructureAssessmentInput(messages, promptContext);
+  const requestParams = buildStructureAssessmentParseRequestParams(
+    deps.getModel(),
+    input,
+  );
 
   try {
     const response = await deps.parseStructuredResponse(requestParams, {

@@ -125,6 +125,11 @@ function createDeps(
     replace: Array<Record<string, unknown>>;
     complete: Array<Record<string, unknown>>;
     fail: Array<{ aiRunId: string; summary: string }>;
+    insertAssistant: Array<{
+      conversationId: string;
+      content: string;
+      runId: string;
+    }>;
   };
 } {
   const calls = {
@@ -144,6 +149,11 @@ function createDeps(
     replace: [] as Array<Record<string, unknown>>,
     complete: [] as Array<Record<string, unknown>>,
     fail: [] as Array<{ aiRunId: string; summary: string }>,
+    insertAssistant: [] as Array<{
+      conversationId: string;
+      content: string;
+      runId: string;
+    }>,
   };
 
   return {
@@ -171,7 +181,23 @@ function createDeps(
     failAiRun: vi.fn(async (resolvedAiRunId, summary) => {
       calls.fail.push({ aiRunId: resolvedAiRunId, summary });
     }),
-    generateBranchSuggestion: vi.fn(async (loadedMessages, promptContext, options) => {
+    insertAssistantMessage: vi.fn(async (resolvedConversationId, content, runId) => {
+      calls.insertAssistant.push({
+        conversationId: resolvedConversationId,
+        content,
+        runId,
+      });
+      return {
+        id: "m-discovery",
+        conversation_id: resolvedConversationId,
+        role: "assistant",
+        content,
+        ai_run_id: runId,
+        ordinal: 3,
+        created_at: "2026-01-01T00:00:03.000Z",
+      };
+    }),
+    generateStructureAssessment: vi.fn(async (loadedMessages, promptContext, options) => {
       calls.generate.push({
         messages: loadedMessages,
         promptContext,
@@ -179,7 +205,13 @@ function createDeps(
       });
       return {
         ok: true as const,
-        suggestion: validSuggestion,
+        assessment: {
+          schemaVersion: 1 as const,
+          readiness: "ready" as const,
+          missingInformation: null,
+          questions: null,
+          proposal: validSuggestion,
+        },
         providerResponseId: "resp_suggestion_123",
         inputTokens: 42,
         outputTokens: 17,
@@ -207,7 +239,7 @@ describe("generateAndPersistBranchSuggestion", () => {
     );
 
     expect(result).toEqual({ ok: false, reason: "root_planning_not_found" });
-    expect(deps.generateBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.generateStructureAssessment).not.toHaveBeenCalled();
     expect(deps.beginBranchSuggestionAiRun).not.toHaveBeenCalled();
   });
 
@@ -231,11 +263,17 @@ describe("generateAndPersistBranchSuggestion", () => {
       order.push("begin");
       return { id: aiRunId };
     });
-    deps.generateBranchSuggestion = vi.fn(async () => {
+    deps.generateStructureAssessment = vi.fn(async () => {
       order.push("generate");
       return {
-        ok: true,
-        suggestion: validSuggestion,
+        ok: true as const,
+        assessment: {
+          schemaVersion: 1 as const,
+          readiness: "ready" as const,
+          missingInformation: null,
+          questions: null,
+          proposal: validSuggestion,
+        },
         providerResponseId: "resp_suggestion_123",
         inputTokens: 42,
         outputTokens: 17,
@@ -281,7 +319,7 @@ describe("generateAndPersistBranchSuggestion", () => {
 
     expect(result).toEqual({ ok: false, reason: "persistence_error" });
     expect(deps.beginBranchSuggestionAiRun).not.toHaveBeenCalled();
-    expect(deps.generateBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.generateStructureAssessment).not.toHaveBeenCalled();
     expect(deps.failAiRun).not.toHaveBeenCalled();
     expect(String(result)).not.toContain("node title query failed");
   });
@@ -306,11 +344,17 @@ describe("generateAndPersistBranchSuggestion", () => {
       order.push("begin");
       return { id: aiRunId };
     });
-    deps.generateBranchSuggestion = vi.fn(async () => {
+    deps.generateStructureAssessment = vi.fn(async () => {
       order.push("generate");
       return {
-        ok: true,
-        suggestion: validSuggestion,
+        ok: true as const,
+        assessment: {
+          schemaVersion: 1 as const,
+          readiness: "ready" as const,
+          missingInformation: null,
+          questions: null,
+          proposal: validSuggestion,
+        },
         providerResponseId: "resp_suggestion_123",
         inputTokens: 42,
         outputTokens: 17,
@@ -335,7 +379,7 @@ describe("generateAndPersistBranchSuggestion", () => {
       deps,
     );
 
-    expect(deps.generateBranchSuggestion).toHaveBeenCalledTimes(1);
+    expect(deps.generateStructureAssessment).toHaveBeenCalledTimes(1);
     expect(order).toEqual(["begin", "generate", "replace", "complete"]);
     expect(result.ok).toBe(true);
   });
@@ -350,6 +394,7 @@ describe("generateAndPersistBranchSuggestion", () => {
 
     expect(result).toEqual({
       ok: true,
+      outcome: "proposal",
       suggestion: {
         id: suggestionId,
         worldId,
@@ -389,7 +434,7 @@ describe("generateAndPersistBranchSuggestion", () => {
     );
 
     expect(result).toEqual({ ok: false, reason: "generation_in_progress" });
-    expect(deps.generateBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.generateStructureAssessment).not.toHaveBeenCalled();
     expect(deps.replacePendingBranchSuggestion).not.toHaveBeenCalled();
     expect(deps.completeAiRun).not.toHaveBeenCalled();
     expect(deps.failAiRun).not.toHaveBeenCalled();
@@ -408,7 +453,7 @@ describe("generateAndPersistBranchSuggestion", () => {
     );
 
     expect(result).toEqual({ ok: false, reason: "structure_already_exists" });
-    expect(deps.generateBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.generateStructureAssessment).not.toHaveBeenCalled();
     expect(deps.failAiRun).not.toHaveBeenCalled();
   });
 
@@ -425,14 +470,14 @@ describe("generateAndPersistBranchSuggestion", () => {
     );
 
     expect(result).toEqual({ ok: false, reason: "persistence_error" });
-    expect(deps.generateBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.generateStructureAssessment).not.toHaveBeenCalled();
     expect(deps.failAiRun).not.toHaveBeenCalled();
     expect(String(result)).not.toContain("acquisition failed");
   });
 
   it("fails the ai_run and does not call the replacement RPC on provider failure", async () => {
     const deps = createDeps({
-      generateBranchSuggestion: vi.fn(async () => ({
+      generateStructureAssessment: vi.fn(async () => ({
         ok: false as const,
         reason: "provider_error" as const,
       })),
@@ -451,7 +496,7 @@ describe("generateAndPersistBranchSuggestion", () => {
 
   it("fails the ai_run and does not call the replacement RPC on invalid structured output", async () => {
     const deps = createDeps({
-      generateBranchSuggestion: vi.fn(async () => ({
+      generateStructureAssessment: vi.fn(async () => ({
         ok: false as const,
         reason: "invalid_structured_output" as const,
       })),
@@ -493,7 +538,7 @@ describe("generateAndPersistBranchSuggestion", () => {
   it("fails an acquired ai_run and does not call the replacement RPC when generation aborts", async () => {
     const controller = new AbortController();
     const deps = createDeps({
-      generateBranchSuggestion: vi.fn(async () => {
+      generateStructureAssessment: vi.fn(async () => {
         controller.abort();
         return { ok: false as const, reason: "aborted" as const };
       }),
@@ -592,7 +637,7 @@ describe("generateAndPersistBranchSuggestion", () => {
 
   it("does not retry generation or call the replacement RPC twice", async () => {
     const deps = createDeps({
-      generateBranchSuggestion: vi.fn(async () => ({
+      generateStructureAssessment: vi.fn(async () => ({
         ok: false as const,
         reason: "provider_error" as const,
       })),
@@ -600,7 +645,7 @@ describe("generateAndPersistBranchSuggestion", () => {
 
     await generateAndPersistBranchSuggestion({ worldId, nodeId }, deps);
 
-    expect(deps.generateBranchSuggestion).toHaveBeenCalledTimes(1);
+    expect(deps.generateStructureAssessment).toHaveBeenCalledTimes(1);
     expect(deps.replacePendingBranchSuggestion).not.toHaveBeenCalled();
   });
 
@@ -634,5 +679,123 @@ describe("generateAndPersistBranchSuggestion", () => {
 
     expect(result).toEqual({ ok: false, reason: "persistence_error" });
     expect(String(result)).not.toContain("database unavailable");
+  });
+
+  it("persists one suggestion and no assistant message on the ready path", async () => {
+    const deps = createDeps();
+
+    const result = await generateAndPersistBranchSuggestion(
+      { worldId, nodeId },
+      deps,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.outcome !== "proposal") {
+      throw new Error("Expected proposal outcome");
+    }
+    expect(deps.replacePendingBranchSuggestion).toHaveBeenCalledTimes(1);
+    expect(deps.insertAssistantMessage).not.toHaveBeenCalled();
+  });
+
+  it("persists one assistant Discovery message and no suggestion on the insufficient path", async () => {
+    const deps = createDeps({
+      generateStructureAssessment: vi.fn(async () => ({
+        ok: true as const,
+        assessment: {
+          schemaVersion: 1 as const,
+          readiness: "insufficient" as const,
+          missingInformation: ["Primary audience"],
+          questions: ["Who is the primary audience?"],
+          proposal: null,
+        },
+        providerResponseId: "resp_discovery_123",
+        inputTokens: 30,
+        outputTokens: 12,
+      })),
+    });
+
+    const result = await generateAndPersistBranchSuggestion(
+      { worldId, nodeId },
+      deps,
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      outcome: "discovery",
+      message: {
+        id: "m-discovery",
+        role: "assistant",
+        content:
+          "I need a little more context before I can propose a useful initial structure:\n\n1. Who is the primary audience?",
+        createdAt: "2026-01-01T00:00:03.000Z",
+      },
+    });
+    expect(deps.insertAssistantMessage).toHaveBeenCalledWith(
+      conversationId,
+      "I need a little more context before I can propose a useful initial structure:\n\n1. Who is the primary audience?",
+      aiRunId,
+    );
+    expect(deps.replacePendingBranchSuggestion).not.toHaveBeenCalled();
+    expect(deps.completeAiRun).toHaveBeenCalledWith(aiRunId, {
+      openaiResponseId: "resp_discovery_123",
+      inputTokens: 30,
+      outputTokens: 12,
+    });
+    expect(deps.failAiRun).not.toHaveBeenCalled();
+  });
+
+  it("does not replace an existing pending proposal on insufficient Regenerate", async () => {
+    const deps = createDeps({
+      generateStructureAssessment: vi.fn(async () => ({
+        ok: true as const,
+        assessment: {
+          schemaVersion: 1 as const,
+          readiness: "insufficient" as const,
+          missingInformation: null,
+          questions: ["What is the primary goal?"],
+          proposal: null,
+        },
+        providerResponseId: "resp_discovery_123",
+        inputTokens: 30,
+        outputTokens: 12,
+      })),
+    });
+
+    await generateAndPersistBranchSuggestion({ worldId, nodeId }, deps);
+
+    expect(deps.replacePendingBranchSuggestion).not.toHaveBeenCalled();
+  });
+
+  it("returns persistence_error when Discovery message insertion fails", async () => {
+    const deps = createDeps({
+      generateStructureAssessment: vi.fn(async () => ({
+        ok: true as const,
+        assessment: {
+          schemaVersion: 1 as const,
+          readiness: "insufficient" as const,
+          missingInformation: null,
+          questions: ["What is the primary goal?"],
+          proposal: null,
+        },
+        providerResponseId: "resp_discovery_123",
+        inputTokens: 30,
+        outputTokens: 12,
+      })),
+      insertAssistantMessage: vi.fn(async () => {
+        throw new DatabaseError("insert failed");
+      }),
+    });
+
+    const result = await generateAndPersistBranchSuggestion(
+      { worldId, nodeId },
+      deps,
+    );
+
+    expect(result).toEqual({ ok: false, reason: "persistence_error" });
+    expect(deps.failAiRun).toHaveBeenCalledWith(
+      aiRunId,
+      "Discovery message persistence failed.",
+    );
+    expect(deps.replacePendingBranchSuggestion).not.toHaveBeenCalled();
   });
 });

@@ -1,10 +1,4 @@
-import type { ResponseInput } from "openai/resources/responses/responses";
 import { z } from "zod";
-import {
-  buildResponsesInput,
-  type RootPlanningPromptContext,
-} from "@/lib/ai/prompt";
-import type { DbMessage } from "@/types/db";
 
 export const SUGGESTED_NODE_TITLE_MAX = 120;
 export const SUGGESTED_NODE_DESCRIPTION_MAX = 500;
@@ -55,27 +49,4 @@ export function parseBranchSuggestion(
   }
 
   return { ok: true, suggestion: result.data };
-}
-
-export const BRANCH_SUGGESTION_GENERATION_INSTRUCTION =
-  "Based on the planning conversation and World brief above, propose a concise initial Root-level structure for this World. " +
-  "Return 1 to 6 direct children of the Root only—major workstreams or equivalent top-level areas appropriate to the established domain. " +
-  "Provide meaningful titles, descriptions, and goals or outcomes for each suggested area. " +
-  "Do not include nested children in this response. " +
-  "These are suggestions pending user review only; do not claim that any Nodes have already been created. " +
-  "Do not assume software concepts unless the World context clearly establishes a software domain.";
-
-export function buildBranchSuggestionInput(
-  messages: DbMessage[],
-  promptContext: RootPlanningPromptContext,
-): ResponseInput {
-  const history = buildResponsesInput(messages, promptContext);
-
-  return [
-    ...history,
-    {
-      role: "user",
-      content: BRANCH_SUGGESTION_GENERATION_INSTRUCTION,
-    },
-  ];
 }

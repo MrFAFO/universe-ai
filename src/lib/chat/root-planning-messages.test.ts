@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mapDbMessagesToRootPlanningChatMessages } from "@/lib/chat/root-planning-messages";
+import {
+  appendRootPlanningMessageDeduped,
+  mapDbMessagesToRootPlanningChatMessages,
+} from "@/lib/chat/root-planning-messages";
 import type { DbMessage } from "@/types/db";
 
 const conversationId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -62,5 +65,47 @@ describe("mapDbMessagesToRootPlanningChatMessages", () => {
 
     expect(messages).toHaveLength(1);
     expect(messages[0]?.role).toBe("user");
+  });
+});
+
+describe("appendRootPlanningMessageDeduped", () => {
+  it("appends a Discovery message once", () => {
+    const existing = [
+      {
+        id: "msg-1",
+        role: "user" as const,
+        content: "hi",
+        status: "complete" as const,
+        createdAt: "2026-01-01T10:00:00.000Z",
+      },
+    ];
+    const discovery = {
+      id: "msg-2",
+      role: "assistant" as const,
+      content: "Question?",
+      status: "complete" as const,
+      createdAt: "2026-01-01T11:00:00.000Z",
+    };
+
+    expect(appendRootPlanningMessageDeduped(existing, discovery)).toEqual([
+      ...existing,
+      discovery,
+    ]);
+  });
+
+  it("ignores duplicate Discovery message IDs", () => {
+    const existing = [
+      {
+        id: "msg-2",
+        role: "assistant" as const,
+        content: "Question?",
+        status: "complete" as const,
+        createdAt: "2026-01-01T11:00:00.000Z",
+      },
+    ];
+    const duplicate = { ...existing[0]! };
+
+    expect(appendRootPlanningMessageDeduped(existing, duplicate)).toEqual(existing);
+    expect(appendRootPlanningMessageDeduped(existing, duplicate)).not.toBe(existing);
   });
 });

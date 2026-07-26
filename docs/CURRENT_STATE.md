@@ -111,11 +111,16 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 
 - D6 code-owned Root Planning prompt — `ROOT_PLANNING_SYSTEM_PROMPT` replaces persisted system rows in model input; persisted system messages remain stored but are excluded
 - Compact World brief shared by Root Planning chat and Branch Suggestion generation — World name/description, Root title/goal, and up to 20 current non-root Node titles (`listWorldNodeTitles`)
-- Domain-neutral Branch Suggestion generation instruction; no Readiness or Discovery behavior
+- Domain-neutral generation instructions
+
+**Implemented in Stage D7:**
+
+- D7 readiness assessment and Discovery — `StructureAssessmentV1` transient contract; one structured OpenAI request returns either a ready proposal or insufficient Discovery questions
+- Ready path persists only `BranchSuggestionV1` via the existing replacement RPC; insufficient path persists one ordinary assistant Discovery message linked to `ai_run_id` with no separate Discovery session state
+- POST success is a discriminated union: `{ outcome: "proposal", suggestion }` or `{ outcome: "discovery", message }`; Discovery messages appear chronologically in the existing timeline
 
 **Approved target not yet implemented:**
 
-- Readiness assessment and Discovery (`StructureAssessmentV1`)
 - Approval and rejection UI and API
 - Map refresh after approval
 - Generate with Assumptions (optional, cuttable final commit)
@@ -131,7 +136,7 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 
 **Latest automated verification:**
 
-- 215 tests passed across 19 test files
+- 235 tests passed across 21 test files
 - Lint passed with pre-existing UniverseHero `<img>` warning only
 - Production build passed
 - Branch Suggestions API route appeared in the build output
@@ -160,12 +165,12 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 - Stage D1–D3 Commit 1 committed and pushed on `stage-d-branch-suggestions`.
 - D5 timeline integration completed: server-side pending load, chronological `BranchSuggestionCard`, chat-level Generate/Regenerate; mount-time GET and pending array removed.
 - D6 code-owned Root Planning prompt and compact World brief completed: persisted system rows excluded from model input; chat and Branch Suggestion share the same brief and domain-neutral instructions.
-- Automated verification: 215 tests, lint (one pre-existing warning), production build all pass.
+- D7 readiness assessment and Discovery completed: `StructureAssessmentV1`, one-call structured assessment, proposal or Discovery assistant message outcomes, chronological timeline integration.
+- Automated verification: 235 tests, lint (one pre-existing warning), production build all pass.
 
 ## Next Task
 
 Resume Stage D implementation per the phased plan in `docs/ARCHITECTURE.md`:
 
-1. Phase D7 — readiness assessment and Discovery
-2. Phase D8 — approval, rejection, map refresh
-3. Optional — Generate with Assumptions
+1. Phase D8 — approval, rejection, map refresh
+2. Optional — Generate with Assumptions

@@ -22,7 +22,10 @@ import {
 } from "@/lib/ai/branch-suggestions-client";
 import { PUBLIC_CHAT_STREAM_ERROR_MESSAGE } from "@/lib/ai/stream-protocol";
 import { createNdjsonStreamParser } from "@/lib/ai/stream-parser";
-import type { RootPlanningChatMessage } from "@/lib/chat/root-planning-messages";
+import {
+  appendRootPlanningMessageDeduped,
+  type RootPlanningChatMessage,
+} from "@/lib/chat/root-planning-messages";
 import { buildRootPlanningTimeline } from "@/lib/chat/root-planning-timeline";
 import { BranchSuggestionCard } from "@/components/chat/BranchSuggestionCard";
 
@@ -172,7 +175,20 @@ export function RootPlanningChat({
         return;
       }
 
-      setSuggestion(parsed.suggestion);
+      if (parsed.outcome === "proposal") {
+        setSuggestion(parsed.suggestion);
+      } else {
+        setMessages((current) =>
+          appendRootPlanningMessageDeduped(current, {
+            id: parsed.message.id,
+            role: "assistant",
+            content: parsed.message.content,
+            status: "complete",
+            createdAt: parsed.message.createdAt,
+          }),
+        );
+      }
+
       router.refresh();
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {

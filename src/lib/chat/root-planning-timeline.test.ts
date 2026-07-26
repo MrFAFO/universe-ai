@@ -164,4 +164,30 @@ describe("buildRootPlanningTimeline", () => {
       ),
     ).toEqual(["msg-b", "msg-a", "suggestion"]);
   });
+
+  it("places a later Discovery assistant message after an existing suggestion", () => {
+    const messages = [
+      makeMessage({
+        id: "before",
+        createdAt: "2026-01-01T10:00:00.000Z",
+      }),
+      makeMessage({
+        id: "discovery",
+        role: "assistant",
+        content: "I need a little more context before I can propose a useful initial structure:\n\n1. What is the goal?",
+        createdAt: "2026-01-01T13:00:00.000Z",
+      }),
+    ];
+    const suggestion = makeSuggestion({
+      createdAt: "2026-01-01T12:00:00.000Z",
+    });
+
+    const timeline = buildRootPlanningTimeline(messages, suggestion);
+
+    expect(
+      timeline.map((item) =>
+        item.type === "message" ? item.id : `suggestion:${item.suggestion.id}`,
+      ),
+    ).toEqual(["before", `suggestion:${suggestion.id}`, "discovery"]);
+  });
 });

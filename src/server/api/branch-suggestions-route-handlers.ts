@@ -181,7 +181,15 @@ export async function handlePostBranchSuggestions(
     return mapGenerateFailureToHttpResponse(result.reason);
   }
 
+  if (result.outcome === "discovery") {
+    return NextResponse.json({
+      outcome: "discovery",
+      message: result.message,
+    });
+  }
+
   return NextResponse.json({
+    outcome: "proposal",
     suggestion: toPendingDto(result.suggestion),
   });
 }

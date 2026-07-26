@@ -34,9 +34,36 @@ export const branchSuggestionDtoSchema = z.object({
 
 export type BranchSuggestionDto = z.infer<typeof branchSuggestionDtoSchema>;
 
-export const postBranchSuggestionResponseSchema = z.object({
-  suggestion: branchSuggestionDtoSchema,
-});
+export const branchSuggestionDiscoveryMessageDtoSchema = z
+  .object({
+    id: z.uuid(),
+    role: z.literal("assistant"),
+    content: z.string().trim().min(1),
+    createdAt: z.string(),
+  })
+  .strict();
+
+export type BranchSuggestionDiscoveryMessageDto = z.infer<
+  typeof branchSuggestionDiscoveryMessageDtoSchema
+>;
+
+export const postBranchSuggestionResponseSchema = z.discriminatedUnion(
+  "outcome",
+  [
+    z
+      .object({
+        outcome: z.literal("proposal"),
+        suggestion: branchSuggestionDtoSchema,
+      })
+      .strict(),
+    z
+      .object({
+        outcome: z.literal("discovery"),
+        message: branchSuggestionDiscoveryMessageDtoSchema,
+      })
+      .strict(),
+  ],
+);
 
 export type PostBranchSuggestionResponse = z.infer<
   typeof postBranchSuggestionResponseSchema

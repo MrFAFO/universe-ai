@@ -1,20 +1,21 @@
 import type { ParsedResponse } from "openai/resources/responses/responses";
 import { describe, expect, it, vi } from "vitest";
-import {
-  BRANCH_SUGGESTION_GENERATION_INSTRUCTION,
-  type BranchSuggestionV1,
-} from "@/lib/ai/branch-suggestion";
+import type { BranchSuggestionV1 } from "@/lib/ai/branch-suggestion";
 import {
   ROOT_PLANNING_SYSTEM_PROMPT,
   type RootPlanningPromptContext,
 } from "@/lib/ai/prompt";
 import {
-  BRANCH_SUGGESTION_FORMAT_NAME,
+  STRUCTURE_ASSESSMENT_GENERATION_INSTRUCTION,
+  type StructureAssessmentV1,
+} from "@/lib/ai/structure-assessment";
+import {
   MAX_SUGGESTION_OUTPUT_TOKENS,
-  buildSuggestionParseRequestParams,
-  createDefaultGenerateBranchSuggestionDeps,
-  generateBranchSuggestion,
-  type GenerateBranchSuggestionDeps,
+  STRUCTURE_ASSESSMENT_FORMAT_NAME,
+  buildStructureAssessmentParseRequestParams,
+  createDefaultGenerateStructureAssessmentDeps,
+  generateStructureAssessment,
+  type GenerateStructureAssessmentDeps,
 } from "@/server/ai/generate-branch-suggestion";
 import type { DbMessage } from "@/types/db";
 
@@ -57,13 +58,30 @@ const validSuggestion: BranchSuggestionV1 = {
   ],
 };
 
+const readyAssessment: StructureAssessmentV1 = {
+  schemaVersion: 1,
+  readiness: "ready",
+  missingInformation: null,
+  questions: null,
+  proposal: validSuggestion,
+};
+
+const insufficientAssessment: StructureAssessmentV1 = {
+  schemaVersion: 1,
+  readiness: "insufficient",
+  missingInformation: ["Primary audience"],
+  questions: ["Who is the primary audience for this World?"],
+  proposal: null,
+};
+
 function makeCompletedResponse(
-  overrides: Partial<ParsedResponse<BranchSuggestionV1>> = {},
-): ParsedResponse<BranchSuggestionV1> {
+  assessment: StructureAssessmentV1,
+  overrides: Partial<ParsedResponse<StructureAssessmentV1>> = {},
+): ParsedResponse<StructureAssessmentV1> {
   return {
-    id: "resp_suggestion_123",
+    id: "resp_assessment_123",
     status: "completed",
-    output_parsed: validSuggestion,
+    output_parsed: assessment,
     usage: {
       input_tokens: 42,
       output_tokens: 17,
@@ -78,26 +96,26 @@ function makeCompletedResponse(
         content: [
           {
             type: "output_text",
-            text: JSON.stringify(validSuggestion),
+            text: JSON.stringify(assessment),
             annotations: [],
           },
         ],
       },
     ],
     ...overrides,
-  } as ParsedResponse<BranchSuggestionV1>;
+  } as ParsedResponse<StructureAssessmentV1>;
 }
 
 function createMockDeps(
-  overrides: Partial<GenerateBranchSuggestionDeps> = {},
-): GenerateBranchSuggestionDeps & {
+  overrides: Partial<GenerateStructureAssessmentDeps> = {},
+): GenerateStructureAssessmentDeps & {
   parseCalls: Array<{
-    params: ReturnType<typeof buildSuggestionParseRequestParams>;
+    params: ReturnType<typeof buildStructureAssessmentParseRequestParams>;
     options: { signal?: AbortSignal };
   }>;
 } {
   const parseCalls: Array<{
-    params: ReturnType<typeof buildSuggestionParseRequestParams>;
+    params: ReturnType<typeof buildStructureAssessmentParseRequestParams>;
     options: { signal?: AbortSignal };
   }> = [];
 
@@ -106,7 +124,7 @@ function createMockDeps(
     getModel: vi.fn(() => "gpt-test"),
     parseStructuredResponse: vi.fn(async (params, options) => {
       parseCalls.push({ params, options });
-      return makeCompletedResponse();
+      return makeCompletedResponse(readyAssessment);
     }),
     ...overrides,
   };
@@ -117,74 +135,51 @@ const sampleMessages = [
   makeMessage({ id: "m-2", role: "user", ordinal: 2, content: "Hello" }),
 ];
 
-describe("buildSuggestionParseRequestParams", () => {
-  it("requests the installed SDK native structured-output format", () => {
-    const params = buildSuggestionParseRequestParams(
+describe("buildStructureAssessmentParseRequestParams", () => {
+  it("requests the structure assessment schema with a 2048 token limit", () => {
+    const params = buildStructureAssessmentParseRequestParams(
       "gpt-test",
       [
         { role: "system", content: "Code-owned system" },
         { role: "user", content: "Hello" },
-        { role: "user", content: BRANCH_SUGGESTION_GENERATION_INSTRUCTION },
+        { role: "user", content: STRUCTURE_ASSESSMENT_GENERATION_INSTRUCTION },
       ],
     );
 
     expect(params.model).toBe("gpt-test");
     expect(params.store).toBe(false);
     expect(params.max_output_tokens).toBe(MAX_SUGGESTION_OUTPUT_TOKENS);
+    expect(params.max_output_tokens).toBe(2048);
     expect(params.text.format).toMatchObject({
       type: "json_schema",
-      name: BRANCH_SUGGESTION_FORMAT_NAME,
+      name: STRUCTURE_ASSESSMENT_FORMAT_NAME,
       strict: true,
     });
-    expect(params.input).toEqual([
-      { role: "system", content: "Code-owned system" },
-      { role: "user", content: "Hello" },
-      { role: "user", content: BRANCH_SUGGESTION_GENERATION_INSTRUCTION },
-    ]);
   });
 });
 
-describe("generateBranchSuggestion", () => {
+describe("generateStructureAssessment", () => {
   it("builds the request from the code-owned Root Planning input", async () => {
     const deps = createMockDeps();
     const promptContext = makePromptContext({ worldName: "Acme World" });
 
-    await generateBranchSuggestion(sampleMessages, promptContext, { deps });
+    await generateStructureAssessment(sampleMessages, promptContext, { deps });
 
     expect(deps.parseCalls).toHaveLength(1);
     const input = deps.parseCalls[0]?.params.input;
-    expect(input?.[0]).toMatchObject({ role: "system" });
     expect(input?.[0]?.content).toContain(ROOT_PLANNING_SYSTEM_PROMPT);
     expect(input?.[0]?.content).toContain('"worldName": "Acme World"');
     expect(input?.map((item) => item.content)).not.toContain("System");
     expect(input?.at(-1)).toEqual({
       role: "user",
-      content: BRANCH_SUGGESTION_GENERATION_INSTRUCTION,
+      content: STRUCTURE_ASSESSMENT_GENERATION_INSTRUCTION,
     });
   });
 
-  it("uses the configured model", async () => {
+  it("returns a validated ready assessment on successful structured output", async () => {
     const deps = createMockDeps();
 
-    await generateBranchSuggestion(sampleMessages, makePromptContext(), { deps });
-
-    expect(deps.getModel).toHaveBeenCalledTimes(1);
-    expect(deps.parseCalls[0]?.params.model).toBe("gpt-test");
-  });
-
-  it("uses store false and max_output_tokens 1024", async () => {
-    const deps = createMockDeps();
-
-    await generateBranchSuggestion(sampleMessages, makePromptContext(), { deps });
-
-    expect(deps.parseCalls[0]?.params.store).toBe(false);
-    expect(deps.parseCalls[0]?.params.max_output_tokens).toBe(1024);
-  });
-
-  it("returns a validated suggestion on successful structured output", async () => {
-    const deps = createMockDeps();
-
-    const result = await generateBranchSuggestion(
+    const result = await generateStructureAssessment(
       sampleMessages,
       makePromptContext(),
       { deps },
@@ -192,66 +187,49 @@ describe("generateBranchSuggestion", () => {
 
     expect(result).toEqual({
       ok: true,
-      suggestion: validSuggestion,
-      providerResponseId: "resp_suggestion_123",
+      assessment: readyAssessment,
+      providerResponseId: "resp_assessment_123",
       inputTokens: 42,
       outputTokens: 17,
     });
   });
 
-  it("returns null token counts when usage is unavailable", async () => {
+  it("returns a validated insufficient assessment on successful structured output", async () => {
     const deps = createMockDeps({
       parseStructuredResponse: vi.fn(async () =>
-        makeCompletedResponse({ usage: undefined }),
+        makeCompletedResponse(insufficientAssessment),
       ),
     });
 
-    const result = await generateBranchSuggestion(
+    const result = await generateStructureAssessment(
       sampleMessages,
       makePromptContext(),
       { deps },
     );
 
-    expect(result).toMatchObject({
+    expect(result).toEqual({
       ok: true,
-      inputTokens: null,
-      outputTokens: null,
+      assessment: insufficientAssessment,
+      providerResponseId: "resp_assessment_123",
+      inputTokens: 42,
+      outputTokens: 17,
     });
   });
 
-  it("returns the provider response id when available", async () => {
-    const deps = createMockDeps({
-      parseStructuredResponse: vi.fn(async () =>
-        makeCompletedResponse({ id: "resp_abc" }),
-      ),
-    });
-
-    const result = await generateBranchSuggestion(
-      sampleMessages,
-      makePromptContext(),
-      { deps },
-    );
-
-    expect(result).toMatchObject({
-      ok: true,
-      providerResponseId: "resp_abc",
-    });
-  });
-
-  it("returns invalid_structured_output for malformed provider values", async () => {
+  it("returns invalid_structured_output for inconsistent envelopes", async () => {
     const deps = createMockDeps({
       parseStructuredResponse: vi.fn(async () =>
         makeCompletedResponse({
-          output_parsed: {
-            schemaVersion: 1,
-            rationale: null,
-            nodes: [],
-          } as unknown as BranchSuggestionV1,
+          schemaVersion: 1,
+          readiness: "ready",
+          missingInformation: null,
+          questions: ["What is the goal?"],
+          proposal: validSuggestion,
         }),
       ),
     });
 
-    const result = await generateBranchSuggestion(
+    const result = await generateStructureAssessment(
       sampleMessages,
       makePromptContext(),
       { deps },
@@ -266,7 +244,7 @@ describe("generateBranchSuggestion", () => {
   it("returns provider_refusal when the response contains a refusal", async () => {
     const deps = createMockDeps({
       parseStructuredResponse: vi.fn(async () =>
-        makeCompletedResponse({
+        makeCompletedResponse(readyAssessment, {
           output: [
             {
               id: "msg_1",
@@ -280,7 +258,7 @@ describe("generateBranchSuggestion", () => {
       ),
     });
 
-    const result = await generateBranchSuggestion(
+    const result = await generateStructureAssessment(
       sampleMessages,
       makePromptContext(),
       { deps },
@@ -295,13 +273,13 @@ describe("generateBranchSuggestion", () => {
   it("returns incomplete_response when the provider status is incomplete", async () => {
     const deps = createMockDeps({
       parseStructuredResponse: vi.fn(async () =>
-        makeCompletedResponse({
+        makeCompletedResponse(readyAssessment, {
           status: "incomplete",
         }),
       ),
     });
 
-    const result = await generateBranchSuggestion(
+    const result = await generateStructureAssessment(
       sampleMessages,
       makePromptContext(),
       { deps },
@@ -320,7 +298,7 @@ describe("generateBranchSuggestion", () => {
       }),
     });
 
-    const result = await generateBranchSuggestion(
+    const result = await generateStructureAssessment(
       sampleMessages,
       makePromptContext(),
       { deps },
@@ -337,7 +315,7 @@ describe("generateBranchSuggestion", () => {
     const controller = new AbortController();
     controller.abort();
 
-    const result = await generateBranchSuggestion(
+    const result = await generateStructureAssessment(
       sampleMessages,
       makePromptContext(),
       { deps, signal: controller.signal },
@@ -354,7 +332,7 @@ describe("generateBranchSuggestion", () => {
       }),
     });
 
-    const result = await generateBranchSuggestion(
+    const result = await generateStructureAssessment(
       sampleMessages,
       makePromptContext(),
       { deps },
@@ -370,7 +348,7 @@ describe("generateBranchSuggestion", () => {
       }),
     });
 
-    await generateBranchSuggestion(sampleMessages, makePromptContext(), { deps });
+    await generateStructureAssessment(sampleMessages, makePromptContext(), { deps });
 
     expect(deps.parseStructuredResponse).toHaveBeenCalledTimes(1);
   });
@@ -380,7 +358,7 @@ describe("generateBranchSuggestion", () => {
     vi.stubEnv("OPENAI_MODEL", "test-model");
 
     try {
-      const deps = createDefaultGenerateBranchSuggestionDeps();
+      const deps = createDefaultGenerateStructureAssessmentDeps();
 
       expect(typeof deps.getModel).toBe("function");
       expect(typeof deps.parseStructuredResponse).toBe("function");

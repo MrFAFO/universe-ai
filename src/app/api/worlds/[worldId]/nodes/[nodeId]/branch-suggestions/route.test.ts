@@ -99,6 +99,7 @@ function createDeps(
   return {
     generateAndPersistBranchSuggestion: vi.fn(async () => ({
       ok: true as const,
+      outcome: "proposal" as const,
       suggestion: makePersistedSuggestion(),
     })),
     resolveRootPlanningConversation: vi.fn(async () => context),
@@ -185,6 +186,7 @@ describe("handlePostBranchSuggestions", () => {
 
     expect(response.status).toBe(200);
     expect(parsePostBranchSuggestionResponse(await readJson(response))).toEqual({
+      outcome: "proposal",
       suggestion: {
         id: suggestionId,
         worldId,
@@ -195,6 +197,39 @@ describe("handlePostBranchSuggestions", () => {
         schemaVersion: 1,
         payload: validPayload,
         createdAt: "2026-01-01T00:00:02.000Z",
+      },
+    });
+  });
+
+  it("returns a Discovery assistant message on insufficient assessment", async () => {
+    const deps = createDeps({
+      generateAndPersistBranchSuggestion: vi.fn(async () => ({
+        ok: true as const,
+        outcome: "discovery" as const,
+        message: {
+          id: "11111111-1111-4111-8111-111111111111",
+          role: "assistant" as const,
+          content:
+            "I need a little more context before I can propose a useful initial structure:\n\n1. What is the primary goal?",
+          createdAt: "2026-01-01T00:00:03.000Z",
+        },
+      })),
+    });
+
+    const response = await handlePostBranchSuggestions(
+      { worldId, nodeId, signal: new AbortController().signal },
+      deps,
+    );
+
+    expect(response.status).toBe(200);
+    expect(parsePostBranchSuggestionResponse(await readJson(response))).toEqual({
+      outcome: "discovery",
+      message: {
+        id: "11111111-1111-4111-8111-111111111111",
+        role: "assistant",
+        content:
+          "I need a little more context before I can propose a useful initial structure:\n\n1. What is the primary goal?",
+        createdAt: "2026-01-01T00:00:03.000Z",
       },
     });
   });
