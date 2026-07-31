@@ -144,7 +144,7 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 - 296 tests passed across 22 test files
 - Lint passed with pre-existing UniverseHero `<img>` warning only
 - Production build passed; approve and reject decision routes appear in build output
-- Manual Stage D acceptance is next
+- Manual Stage D acceptance passed: Discovery, proposal generation, Regenerate replacement, Reject, Approve, persistence after refresh, map refresh, Generate hiding after approval, and duplicate-Approve protection were verified
 
 **Prior automated verification (D7 committed):**
 
@@ -184,5 +184,4 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 
 Resume Stage D implementation per the phased plan in `docs/ARCHITECTURE.md`:
 
-1. Manual Stage D acceptance for D8 approve/reject and map refresh
-2. Optional — Generate with Assumptions
+1. Perform final branch review and merge `stage-d-branch-suggestions` into the main branch.`r`n2. Defer optional Generate with Assumptions to a future iteration.
