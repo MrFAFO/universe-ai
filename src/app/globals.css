@@ -2049,3 +2049,56 @@ body {
   color: var(--text-muted);
 }
 
+.branch-suggestion-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.15rem;
+}
+
+.branch-suggestion-card__approve,
+.branch-suggestion-card__reject {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  border-radius: var(--radius-md);
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.branch-suggestion-card__approve {
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.16);
+  color: #dbeafe;
+}
+
+.branch-suggestion-card__approve:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.24);
+}
+
+.branch-suggestion-card__reject {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 22, 41, 0.45);
+  color: var(--text-secondary);
+}
+
+.branch-suggestion-card__reject:hover:not(:disabled) {
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fecaca;
+}
+
+.branch-suggestion-card__approve:disabled,
+.branch-suggestion-card__reject:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.branch-suggestion-card__decision-error {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #fca5a5;
+}
+

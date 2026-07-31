@@ -1,11 +1,19 @@
 import {
   branchSuggestionApiErrorResponseSchema,
   branchSuggestionConflictResponseSchema,
+  parseApproveBranchSuggestionResponse,
+  parseRejectBranchSuggestionResponse,
   type BranchSuggestionConflictResponse,
 } from "@/lib/ai/branch-suggestion-api";
 
 export const SAFE_BRANCH_SUGGESTIONS_GENERATE_ERROR_MESSAGE =
   "Unable to generate a world structure suggestion right now.";
+
+export const SAFE_BRANCH_SUGGESTIONS_APPROVE_ERROR_MESSAGE =
+  "Unable to approve this world structure suggestion right now.";
+
+export const SAFE_BRANCH_SUGGESTIONS_REJECT_ERROR_MESSAGE =
+  "Unable to reject this world structure suggestion right now.";
 
 export const SAFE_BRANCH_SUGGESTIONS_RESPONSE_ERROR_MESSAGE =
   "Unable to process the suggestion response.";
@@ -27,6 +35,98 @@ export function buildBranchSuggestionsApiUrl(
   nodeId: string,
 ): string {
   return `/api/worlds/${worldId}/nodes/${nodeId}/branch-suggestions`;
+}
+
+export function buildApproveBranchSuggestionApiUrl(
+  worldId: string,
+  nodeId: string,
+  suggestionId: string,
+): string {
+  return `/api/worlds/${worldId}/nodes/${nodeId}/branch-suggestions/${suggestionId}/approve`;
+}
+
+export function buildRejectBranchSuggestionApiUrl(
+  worldId: string,
+  nodeId: string,
+  suggestionId: string,
+): string {
+  return `/api/worlds/${worldId}/nodes/${nodeId}/branch-suggestions/${suggestionId}/reject`;
+}
+
+export async function approveBranchSuggestionRequest(
+  worldId: string,
+  nodeId: string,
+  suggestionId: string,
+  options?: { signal?: AbortSignal },
+): Promise<
+  | { ok: true; data: ReturnType<typeof parseApproveBranchSuggestionResponse> }
+  | { ok: false; error: string }
+> {
+  const response = await fetch(
+    buildApproveBranchSuggestionApiUrl(worldId, nodeId, suggestionId),
+    {
+      method: "POST",
+      signal: options?.signal,
+    },
+  );
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: await readBranchSuggestionApiErrorMessage(
+        response,
+        SAFE_BRANCH_SUGGESTIONS_APPROVE_ERROR_MESSAGE,
+      ),
+    };
+  }
+
+  try {
+    const raw: unknown = await response.json();
+    return { ok: true, data: parseApproveBranchSuggestionResponse(raw) };
+  } catch {
+    return {
+      ok: false,
+      error: SAFE_BRANCH_SUGGESTIONS_RESPONSE_ERROR_MESSAGE,
+    };
+  }
+}
+
+export async function rejectBranchSuggestionRequest(
+  worldId: string,
+  nodeId: string,
+  suggestionId: string,
+  options?: { signal?: AbortSignal },
+): Promise<
+  | { ok: true; data: ReturnType<typeof parseRejectBranchSuggestionResponse> }
+  | { ok: false; error: string }
+> {
+  const response = await fetch(
+    buildRejectBranchSuggestionApiUrl(worldId, nodeId, suggestionId),
+    {
+      method: "POST",
+      signal: options?.signal,
+    },
+  );
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: await readBranchSuggestionApiErrorMessage(
+        response,
+        SAFE_BRANCH_SUGGESTIONS_REJECT_ERROR_MESSAGE,
+      ),
+    };
+  }
+
+  try {
+    const raw: unknown = await response.json();
+    return { ok: true, data: parseRejectBranchSuggestionResponse(raw) };
+  } catch {
+    return {
+      ok: false,
+      error: SAFE_BRANCH_SUGGESTIONS_RESPONSE_ERROR_MESSAGE,
+    };
+  }
 }
 
 export function extractBranchSuggestionApiErrorMessage(

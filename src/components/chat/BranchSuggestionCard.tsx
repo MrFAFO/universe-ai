@@ -1,13 +1,36 @@
 import type { BranchSuggestionDto } from "@/lib/ai/branch-suggestion-api";
 import { formatBranchSuggestionCreatedAt } from "@/lib/ai/branch-suggestions-client";
 
+export type BranchSuggestionDecisionState =
+  | "idle"
+  | "approving"
+  | "rejecting";
+
 export interface BranchSuggestionCardProps {
   suggestion: BranchSuggestionDto;
+  onApprove(): void;
+  onReject(): void;
+  decisionState: BranchSuggestionDecisionState;
+  decisionError: string | null;
+  actionsDisabled: boolean;
 }
 
-export function BranchSuggestionCard({ suggestion }: BranchSuggestionCardProps) {
+export function BranchSuggestionCard({
+  suggestion,
+  onApprove,
+  onReject,
+  decisionState,
+  decisionError,
+  actionsDisabled,
+}: BranchSuggestionCardProps) {
+  const isDeciding = decisionState !== "idle";
+  const buttonsDisabled = actionsDisabled || isDeciding;
+
   return (
-    <article className="branch-suggestion-card">
+    <article
+      className="branch-suggestion-card"
+      aria-busy={isDeciding}
+    >
       <header className="branch-suggestion-card__header">
         <span className="branch-suggestion-card__status-label">
           Pending review
@@ -60,6 +83,33 @@ export function BranchSuggestionCard({ suggestion }: BranchSuggestionCardProps) 
           </li>
         ))}
       </ul>
+
+      <footer className="branch-suggestion-card__actions">
+        <button
+          type="button"
+          className="branch-suggestion-card__approve"
+          onClick={onApprove}
+          disabled={buttonsDisabled}
+          aria-label="Approve world structure suggestion"
+        >
+          {decisionState === "approving" ? "Approving…" : "Approve"}
+        </button>
+        <button
+          type="button"
+          className="branch-suggestion-card__reject"
+          onClick={onReject}
+          disabled={buttonsDisabled}
+          aria-label="Reject world structure suggestion"
+        >
+          {decisionState === "rejecting" ? "Rejecting…" : "Reject"}
+        </button>
+      </footer>
+
+      {decisionError ? (
+        <p className="branch-suggestion-card__decision-error" role="alert">
+          {decisionError}
+        </p>
+      ) : null}
     </article>
   );
 }

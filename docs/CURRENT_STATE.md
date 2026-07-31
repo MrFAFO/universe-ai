@@ -119,12 +119,17 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 - Ready path persists only `BranchSuggestionV1` via the existing replacement RPC; insufficient path persists one ordinary assistant Discovery message linked to `ai_run_id` with no separate Discovery session state
 - POST success is a discriminated union: `{ outcome: "proposal", suggestion }` or `{ outcome: "discovery", message }`; Discovery messages appear chronologically in the existing timeline
 
+**Implemented in Stage D8:**
+
+- D8 approval and rejection API — POST `/api/worlds/[worldId]/nodes/[nodeId]/branch-suggestions/[suggestionId]/approve` and `/reject`; uses existing atomic `approve_branch_suggestion` and `reject_branch_suggestion` RPCs with idempotent re-approve/re-reject
+- Ownership validation against world, conversation and root node before decision RPCs; missing or mismatched suggestions return 404
+- Successful approve/reject clears the pending proposal card; approval revalidates World Map (`/worlds/[worldId]`) and Root Planning paths, then client `router.refresh()` keeps the map DB-sourced
+- Server-derived `hasInitialStructure` from `listWorldNodeTitles`; Generate/Regenerate hidden once initial structure exists
+- Proposal card Approve/Reject actions with decision lifecycle guards, stale-response protection and safe client errors
+
 **Approved target not yet implemented:**
 
-- Approval and rejection UI and API
-- Map refresh after approval
 - Generate with Assumptions (optional, cuttable final commit)
-
 ### Not Yet Implemented
 
 - World Map editing beyond approved structure creation: relation editing, reparenting.
@@ -135,6 +140,13 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 ## Validation Status
 
 **Latest automated verification:**
+
+- 296 tests passed across 22 test files
+- Lint passed with pre-existing UniverseHero `<img>` warning only
+- Production build passed; approve and reject decision routes appear in build output
+- Manual Stage D acceptance is next
+
+**Prior automated verification (D7 committed):**
 
 - 235 tests passed across 21 test files
 - Lint passed with pre-existing UniverseHero `<img>` warning only
@@ -166,11 +178,11 @@ For durable technical architecture see `docs/ARCHITECTURE.md`.
 - D5 timeline integration completed: server-side pending load, chronological `BranchSuggestionCard`, chat-level Generate/Regenerate; mount-time GET and pending array removed.
 - D6 code-owned Root Planning prompt and compact World brief completed: persisted system rows excluded from model input; chat and Branch Suggestion share the same brief and domain-neutral instructions.
 - D7 readiness assessment and Discovery completed: `StructureAssessmentV1`, one-call structured assessment, proposal or Discovery assistant message outcomes, chronological timeline integration.
-- Automated verification: 235 tests, lint (one pre-existing warning), production build all pass.
+- D8 approval/rejection and map refresh completed: approve/reject endpoints, ownership validation, pending card removal, server-derived `hasInitialStructure`, Generate hidden after approval.
 
 ## Next Task
 
 Resume Stage D implementation per the phased plan in `docs/ARCHITECTURE.md`:
 
-1. Phase D8 — approval, rejection, map refresh
+1. Manual Stage D acceptance for D8 approve/reject and map refresh
 2. Optional — Generate with Assumptions

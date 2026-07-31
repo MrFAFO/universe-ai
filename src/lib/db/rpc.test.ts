@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BranchSuggestionV1 } from "@/lib/ai/branch-suggestion";
-import { replacePendingBranchSuggestion, beginBranchSuggestionAiRun } from "@/lib/db/rpc";
+import { replacePendingBranchSuggestion, beginBranchSuggestionAiRun, approveBranchSuggestion, rejectBranchSuggestion } from "@/lib/db/rpc";
 import { DatabaseError } from "@/lib/db/errors";
 import type { DbBranchSuggestion } from "@/types/db";
 
@@ -218,5 +218,130 @@ describe("beginBranchSuggestionAiRun RPC wrapper", () => {
         schemaVersion: 1,
       }),
     ).rejects.toThrow(DatabaseError);
+  });
+});
+
+describe("approveBranchSuggestion RPC wrapper", () => {
+  beforeEach(() => {
+    mockRpc.mockReset();
+  });
+
+  it("maps arguments to the Supabase RPC parameter names", async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        suggestion_id: suggestionId,
+        status: "approved",
+        created_node_ids: [parentNodeId],
+        idempotent: false,
+      },
+      error: null,
+    });
+
+    await approveBranchSuggestion({ suggestionId });
+
+    expect(mockRpc).toHaveBeenCalledWith("approve_branch_suggestion", {
+      p_suggestion_id: suggestionId,
+    });
+  });
+
+  it("parses a valid approval result from RPC JSONB", async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        suggestion_id: suggestionId,
+        status: "approved",
+        created_node_ids: [parentNodeId],
+        idempotent: true,
+      },
+      error: null,
+    });
+
+    const result = await approveBranchSuggestion({ suggestionId });
+
+    expect(result).toEqual({
+      suggestion_id: suggestionId,
+      status: "approved",
+      created_node_ids: [parentNodeId],
+      idempotent: true,
+    });
+  });
+
+  it("rejects malformed approval RPC data", async () => {
+    mockRpc.mockResolvedValue({
+      data: { suggestion_id: suggestionId, status: "approved" },
+      error: null,
+    });
+
+    await expect(approveBranchSuggestion({ suggestionId })).rejects.toThrow();
+  });
+
+  it("rethrows Supabase RPC errors for upstream classification", async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { message: "Suggestion is not pending", code: "P0001" },
+    });
+
+    await expect(approveBranchSuggestion({ suggestionId })).rejects.toThrow(
+      "Suggestion is not pending",
+    );
+  });
+});
+
+describe("rejectBranchSuggestion RPC wrapper", () => {
+  beforeEach(() => {
+    mockRpc.mockReset();
+  });
+
+  it("maps arguments to the Supabase RPC parameter names", async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        suggestion_id: suggestionId,
+        status: "rejected",
+        decided_at: "2026-01-02T00:00:00.000Z",
+        idempotent: false,
+      },
+      error: null,
+    });
+
+    await rejectBranchSuggestion({ suggestionId });
+
+    expect(mockRpc).toHaveBeenCalledWith("reject_branch_suggestion", {
+      p_suggestion_id: suggestionId,
+    });
+  });
+
+  it("parses a valid rejection result from RPC JSONB", async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        suggestion_id: suggestionId,
+        status: "rejected",
+        decided_at: "2026-01-02T00:00:00.000Z",
+        idempotent: false,
+      },
+      error: null,
+    });
+
+    const result = await rejectBranchSuggestion({ suggestionId });
+
+    expect(result.decided_at).toBe("2026-01-02T00:00:00.000Z");
+  });
+
+  it("rejects malformed rejection RPC data", async () => {
+    mockRpc.mockResolvedValue({
+      data: { suggestion_id: suggestionId, status: "rejected" },
+      error: null,
+    });
+
+    await expect(rejectBranchSuggestion({ suggestionId })).rejects.toThrow();
+  });
+
+  it("rethrows Supabase RPC errors for upstream classification", async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { message: "Suggestion not found", code: "P0001" },
+    });
+
+    await expect(rejectBranchSuggestion({ suggestionId })).rejects.toThrow(
+      "Suggestion not found",
+    );
   });
 });

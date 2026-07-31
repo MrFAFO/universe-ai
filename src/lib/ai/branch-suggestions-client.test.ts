@@ -1,20 +1,48 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BRANCH_SUGGESTION_CONFLICT_MESSAGES,
+  SAFE_BRANCH_SUGGESTIONS_APPROVE_ERROR_MESSAGE,
+  SAFE_BRANCH_SUGGESTIONS_REJECT_ERROR_MESSAGE,
+  approveBranchSuggestionRequest,
+  buildApproveBranchSuggestionApiUrl,
   buildBranchSuggestionsApiUrl,
+  buildRejectBranchSuggestionApiUrl,
   extractBranchSuggestionApiErrorMessage,
   formatBranchSuggestionCreatedAt,
   readBranchSuggestionApiErrorMessage,
+  rejectBranchSuggestionRequest,
   SAFE_BRANCH_SUGGESTIONS_GENERATE_ERROR_MESSAGE,
+  SAFE_BRANCH_SUGGESTIONS_RESPONSE_ERROR_MESSAGE,
 } from "@/lib/ai/branch-suggestions-client";
 
 const worldId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const nodeId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const suggestionId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("buildBranchSuggestionsApiUrl", () => {
   it("builds the dedicated branch suggestions API path", () => {
     expect(buildBranchSuggestionsApiUrl(worldId, nodeId)).toBe(
       `/api/worlds/${worldId}/nodes/${nodeId}/branch-suggestions`,
+    );
+  });
+});
+
+describe("buildApproveBranchSuggestionApiUrl", () => {
+  it("builds the approve decision API path", () => {
+    expect(buildApproveBranchSuggestionApiUrl(worldId, nodeId, suggestionId)).toBe(
+      `/api/worlds/${worldId}/nodes/${nodeId}/branch-suggestions/${suggestionId}/approve`,
+    );
+  });
+});
+
+describe("buildRejectBranchSuggestionApiUrl", () => {
+  it("builds the reject decision API path", () => {
+    expect(buildRejectBranchSuggestionApiUrl(worldId, nodeId, suggestionId)).toBe(
+      `/api/worlds/${worldId}/nodes/${nodeId}/branch-suggestions/${suggestionId}/reject`,
     );
   });
 });
@@ -128,5 +156,144 @@ describe("formatBranchSuggestionCreatedAt", () => {
 
   it("returns the original value when the timestamp is invalid", () => {
     expect(formatBranchSuggestionCreatedAt("not-a-date")).toBe("not-a-date");
+  });
+});
+
+describe("approveBranchSuggestionRequest", () => {
+  it("POSTs to the approve endpoint without a body and forwards AbortSignal", async () => {
+    const signal = new AbortController().signal;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          outcome: "approved",
+          suggestionId,
+          createdNodeIds: [nodeId],
+          idempotent: false,
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const result = await approveBranchSuggestionRequest(
+      worldId,
+      nodeId,
+      suggestionId,
+      { signal },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      buildApproveBranchSuggestionApiUrl(worldId, nodeId, suggestionId),
+      { method: "POST", signal },
+    );
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        outcome: "approved",
+        suggestionId,
+        createdNodeIds: [nodeId],
+        idempotent: false,
+      },
+    });
+  });
+
+  it("returns a safe response error for malformed success bodies", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ outcome: "approved" }), { status: 200 }),
+    );
+
+    await expect(
+      approveBranchSuggestionRequest(worldId, nodeId, suggestionId),
+    ).resolves.toEqual({
+      ok: false,
+      error: SAFE_BRANCH_SUGGESTIONS_RESPONSE_ERROR_MESSAGE,
+    });
+  });
+
+  it("returns a safe approve error for failed responses", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: "This world structure suggestion can no longer be decided.",
+          code: "suggestion_not_pending",
+        }),
+        { status: 409 },
+      ),
+    );
+
+    await expect(
+      approveBranchSuggestionRequest(worldId, nodeId, suggestionId),
+    ).resolves.toEqual({
+      ok: false,
+      error: "This world structure suggestion can no longer be decided.",
+    });
+  });
+
+  it("falls back to the safe approve error when the failure body is unusable", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("not json", { status: 500 }),
+    );
+
+    await expect(
+      approveBranchSuggestionRequest(worldId, nodeId, suggestionId),
+    ).resolves.toEqual({
+      ok: false,
+      error: SAFE_BRANCH_SUGGESTIONS_APPROVE_ERROR_MESSAGE,
+    });
+  });
+});
+
+describe("rejectBranchSuggestionRequest", () => {
+  it("POSTs to the reject endpoint without a body", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          outcome: "rejected",
+          suggestionId,
+          decidedAt: "2026-01-02T00:00:00.000Z",
+          idempotent: false,
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const result = await rejectBranchSuggestionRequest(
+      worldId,
+      nodeId,
+      suggestionId,
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      buildRejectBranchSuggestionApiUrl(worldId, nodeId, suggestionId),
+      { method: "POST", signal: undefined },
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("returns a stable conflict message for structure_already_exists", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ code: "structure_already_exists" }), {
+        status: 409,
+      }),
+    );
+
+    await expect(
+      rejectBranchSuggestionRequest(worldId, nodeId, suggestionId),
+    ).resolves.toEqual({
+      ok: false,
+      error: BRANCH_SUGGESTION_CONFLICT_MESSAGES.structure_already_exists,
+    });
+  });
+
+  it("falls back to the safe reject error when the failure body is unusable", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("not json", { status: 500 }),
+    );
+
+    await expect(
+      rejectBranchSuggestionRequest(worldId, nodeId, suggestionId),
+    ).resolves.toEqual({
+      ok: false,
+      error: SAFE_BRANCH_SUGGESTIONS_REJECT_ERROR_MESSAGE,
+    });
   });
 });

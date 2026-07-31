@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  parseApproveBranchSuggestionResponse,
   parsePostBranchSuggestionResponse,
+  parseRejectBranchSuggestionResponse,
   postBranchSuggestionResponseSchema,
 } from "@/lib/ai/branch-suggestion-api";
 
@@ -144,6 +146,74 @@ describe("parsePostBranchSuggestionResponse", () => {
           content: "What is the primary goal?",
           createdAt: "2026-01-01T00:00:03.000Z",
         },
+      }),
+    ).toThrow();
+  });
+});
+
+describe("parseApproveBranchSuggestionResponse", () => {
+  it("parses a valid approval response", () => {
+    const raw = {
+      outcome: "approved",
+      suggestionId,
+      createdNodeIds: [parentNodeId],
+      idempotent: false,
+    };
+
+    expect(parseApproveBranchSuggestionResponse(raw)).toEqual(raw);
+  });
+
+  it("rejects malformed approval responses", () => {
+    expect(() =>
+      parseApproveBranchSuggestionResponse({
+        outcome: "approved",
+        suggestionId: "not-a-uuid",
+        createdNodeIds: [],
+        idempotent: false,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      parseApproveBranchSuggestionResponse({
+        outcome: "approved",
+        suggestionId,
+        createdNodeIds: [],
+        idempotent: false,
+        extra: true,
+      }),
+    ).toThrow();
+  });
+});
+
+describe("parseRejectBranchSuggestionResponse", () => {
+  it("parses a valid rejection response", () => {
+    const raw = {
+      outcome: "rejected",
+      suggestionId,
+      decidedAt: "2026-01-02T00:00:00.000Z",
+      idempotent: true,
+    };
+
+    expect(parseRejectBranchSuggestionResponse(raw)).toEqual(raw);
+  });
+
+  it("rejects malformed rejection responses", () => {
+    expect(() =>
+      parseRejectBranchSuggestionResponse({
+        outcome: "rejected",
+        suggestionId,
+        decidedAt: "2026-01-02T00:00:00.000Z",
+        idempotent: true,
+        extra: true,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      parseRejectBranchSuggestionResponse({
+        outcome: "approved",
+        suggestionId,
+        decidedAt: "2026-01-02T00:00:00.000Z",
+        idempotent: true,
       }),
     ).toThrow();
   });

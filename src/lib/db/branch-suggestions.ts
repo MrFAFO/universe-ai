@@ -5,8 +5,14 @@ import { DatabaseError } from "./errors";
 import { createSupabaseServerClient } from "./client";
 import {
   beginBranchSuggestionAiRun as beginBranchSuggestionAiRunRpc,
+  approveBranchSuggestion as approveBranchSuggestionRpc,
+  rejectBranchSuggestion as rejectBranchSuggestionRpc,
   replacePendingBranchSuggestion as replacePendingBranchSuggestionRpc,
 } from "./rpc";
+import type {
+  ApproveBranchSuggestionResult,
+  RejectBranchSuggestionResult,
+} from "@/types/db";
 
 export class BranchSuggestionPayloadError extends Error {
   readonly suggestionId: string;
@@ -36,6 +42,20 @@ export class GenerationInProgressError extends Error {
   constructor() {
     super("generation_in_progress");
     this.name = "GenerationInProgressError";
+  }
+}
+
+export class BranchSuggestionNotFoundError extends Error {
+  constructor() {
+    super("Suggestion not found");
+    this.name = "BranchSuggestionNotFoundError";
+  }
+}
+
+export class BranchSuggestionNotPendingError extends Error {
+  constructor() {
+    super("Suggestion is not pending");
+    this.name = "BranchSuggestionNotPendingError";
   }
 }
 
@@ -169,6 +189,81 @@ export function classifyBranchSuggestionPersistenceError(error: unknown): never 
   }
 
   throw error;
+}
+
+export interface BranchSuggestionOwnershipContext {
+  world: { id: string };
+  conversation: { id: string };
+  node: { id: string };
+}
+
+export function assertBranchSuggestionOwnership(
+  context: BranchSuggestionOwnershipContext,
+  suggestion: PersistedBranchSuggestion,
+): void {
+  if (
+    suggestion.worldId !== context.world.id ||
+    suggestion.conversationId !== context.conversation.id ||
+    suggestion.parentNodeId !== context.node.id
+  ) {
+    throw new BranchSuggestionNotFoundError();
+  }
+}
+
+export function classifyBranchSuggestionDecisionError(error: unknown): never {
+  if (
+    error instanceof BranchSuggestionNotFoundError ||
+    error instanceof BranchSuggestionNotPendingError ||
+    error instanceof StructureAlreadyExistsError ||
+    error instanceof DatabaseError
+  ) {
+    throw error;
+  }
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : isPostgrestErrorLike(error)
+        ? error.message
+        : null;
+
+  if (!message) {
+    throw new DatabaseError("Unable to classify branch suggestion decision error.");
+  }
+
+  switch (message) {
+    case "Suggestion not found":
+      throw new BranchSuggestionNotFoundError();
+    case "Suggestion has already been rejected":
+    case "Suggestion has already been approved":
+    case "Suggestion has been superseded":
+    case "Suggestion is not pending":
+      throw new BranchSuggestionNotPendingError();
+    case "structure_already_exists":
+      throw new StructureAlreadyExistsError();
+    default:
+      throw new DatabaseError(message);
+  }
+}
+
+export async function approvePendingBranchSuggestion(
+  suggestionId: string,
+): Promise<ApproveBranchSuggestionResult> {
+  try {
+    return await approveBranchSuggestionRpc({ suggestionId });
+  } catch (error) {
+    classifyBranchSuggestionDecisionError(error);
+  }
+}
+
+export async function rejectPendingBranchSuggestion(
+  suggestionId: string,
+): Promise<RejectBranchSuggestionResult> {
+  try {
+    return await rejectBranchSuggestionRpc({ suggestionId });
+  } catch (error) {
+    classifyBranchSuggestionDecisionError(error);
+  }
 }
 
 export function mapDbBranchSuggestionRow(

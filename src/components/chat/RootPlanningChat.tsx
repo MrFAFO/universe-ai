@@ -15,8 +15,10 @@ import {
 import type { BranchSuggestionDto } from "@/lib/ai/branch-suggestion-api";
 import { parsePostBranchSuggestionResponse } from "@/lib/ai/branch-suggestion-api";
 import {
+  approveBranchSuggestionRequest,
   buildBranchSuggestionsApiUrl,
   readBranchSuggestionApiErrorMessage,
+  rejectBranchSuggestionRequest,
   SAFE_BRANCH_SUGGESTIONS_GENERATE_ERROR_MESSAGE,
   SAFE_BRANCH_SUGGESTIONS_RESPONSE_ERROR_MESSAGE,
 } from "@/lib/ai/branch-suggestions-client";
@@ -28,6 +30,7 @@ import {
 } from "@/lib/chat/root-planning-messages";
 import { buildRootPlanningTimeline } from "@/lib/chat/root-planning-timeline";
 import { BranchSuggestionCard } from "@/components/chat/BranchSuggestionCard";
+import type { BranchSuggestionDecisionState } from "@/components/chat/BranchSuggestionCard";
 
 export type { RootPlanningChatMessage } from "@/lib/chat/root-planning-messages";
 
@@ -42,6 +45,7 @@ export interface RootPlanningChatProps {
   nodeTitle: string;
   initialMessages: RootPlanningChatMessage[];
   initialSuggestion: BranchSuggestionDto | null;
+  hasInitialStructure: boolean;
 }
 
 function createTempId(prefix: "user" | "assistant"): string {
@@ -55,22 +59,32 @@ export function RootPlanningChat({
   nodeTitle,
   initialMessages,
   initialSuggestion,
+  hasInitialStructure: initialHasInitialStructure,
 }: RootPlanningChatProps) {
   const router = useRouter();
   const composerId = useId();
   const [messages, setMessages] =
     useState<RootPlanningChatMessage[]>(initialMessages);
   const [suggestion, setSuggestion] = useState(initialSuggestion);
+  const [hasInitialStructure, setHasInitialStructure] = useState(
+    initialHasInitialStructure,
+  );
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [decisionState, setDecisionState] =
+    useState<BranchSuggestionDecisionState>("idle");
   const [requestError, setRequestError] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const generateAbortControllerRef = useRef<AbortController | null>(null);
+  const decisionAbortControllerRef = useRef<AbortController | null>(null);
   const isStreamingRef = useRef(false);
   const isGeneratingRef = useRef(false);
+  const isDecidingRef = useRef(false);
   const generateRequestIdRef = useRef(0);
+  const decisionRequestIdRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const timeline = useMemo(
@@ -85,14 +99,20 @@ export function RootPlanningChat({
   }, [initialMessages]);
 
   useEffect(() => {
-    if (!isGeneratingRef.current) {
+    if (!isGeneratingRef.current && !isDecidingRef.current) {
       setSuggestion(initialSuggestion);
     }
   }, [initialSuggestion]);
 
   useEffect(() => {
+    if (!isDecidingRef.current) {
+      setHasInitialStructure(initialHasInitialStructure);
+    }
+  }, [initialHasInitialStructure]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [timeline, isStreaming, isGenerating]);
+  }, [timeline, isStreaming, isGenerating, decisionState]);
 
   useEffect(() => {
     return () => {
@@ -100,6 +120,8 @@ export function RootPlanningChat({
       abortControllerRef.current = null;
       generateAbortControllerRef.current?.abort();
       generateAbortControllerRef.current = null;
+      decisionAbortControllerRef.current?.abort();
+      decisionAbortControllerRef.current = null;
     };
   }, []);
 
@@ -127,7 +149,12 @@ export function RootPlanningChat({
   );
 
   const handleGenerate = useCallback(async () => {
-    if (isGeneratingRef.current || isStreamingRef.current) {
+    if (
+      hasInitialStructure ||
+      isGeneratingRef.current ||
+      isStreamingRef.current ||
+      isDecidingRef.current
+    ) {
       return;
     }
 
@@ -210,11 +237,155 @@ export function RootPlanningChat({
         generateAbortControllerRef.current = null;
       }
     }
-  }, [nodeId, router, worldId]);
+  }, [hasInitialStructure, nodeId, router, worldId]);
+
+  const handleApprove = useCallback(async () => {
+    if (
+      !suggestion ||
+      isDecidingRef.current ||
+      isStreamingRef.current ||
+      isGeneratingRef.current
+    ) {
+      return;
+    }
+
+    const activeSuggestionId = suggestion.id;
+    const requestId = ++decisionRequestIdRef.current;
+    const controller = new AbortController();
+
+    decisionAbortControllerRef.current?.abort();
+    decisionAbortControllerRef.current = controller;
+    isDecidingRef.current = true;
+    setDecisionState("approving");
+    setDecisionError(null);
+
+    try {
+      const result = await approveBranchSuggestionRequest(
+        worldId,
+        nodeId,
+        activeSuggestionId,
+        { signal: controller.signal },
+      );
+
+      if (requestId !== decisionRequestIdRef.current) {
+        return;
+      }
+
+      if (!result.ok) {
+        setDecisionError(result.error);
+        return;
+      }
+
+      if (result.data.suggestionId !== activeSuggestionId) {
+        return;
+      }
+
+      setSuggestion((current) =>
+        current?.id === activeSuggestionId ? null : current,
+      );
+      setHasInitialStructure(true);
+      router.refresh();
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
+      if (requestId !== decisionRequestIdRef.current) {
+        return;
+      }
+
+      setDecisionError(
+        "Unable to approve this world structure suggestion right now.",
+      );
+    } finally {
+      if (requestId === decisionRequestIdRef.current) {
+        isDecidingRef.current = false;
+        setDecisionState("idle");
+      }
+
+      if (decisionAbortControllerRef.current === controller) {
+        decisionAbortControllerRef.current = null;
+      }
+    }
+  }, [nodeId, router, suggestion, worldId]);
+
+  const handleReject = useCallback(async () => {
+    if (
+      !suggestion ||
+      isDecidingRef.current ||
+      isStreamingRef.current ||
+      isGeneratingRef.current
+    ) {
+      return;
+    }
+
+    const activeSuggestionId = suggestion.id;
+    const requestId = ++decisionRequestIdRef.current;
+    const controller = new AbortController();
+
+    decisionAbortControllerRef.current?.abort();
+    decisionAbortControllerRef.current = controller;
+    isDecidingRef.current = true;
+    setDecisionState("rejecting");
+    setDecisionError(null);
+
+    try {
+      const result = await rejectBranchSuggestionRequest(
+        worldId,
+        nodeId,
+        activeSuggestionId,
+        { signal: controller.signal },
+      );
+
+      if (requestId !== decisionRequestIdRef.current) {
+        return;
+      }
+
+      if (!result.ok) {
+        setDecisionError(result.error);
+        return;
+      }
+
+      if (result.data.suggestionId !== activeSuggestionId) {
+        return;
+      }
+
+      setSuggestion((current) =>
+        current?.id === activeSuggestionId ? null : current,
+      );
+      router.refresh();
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
+      if (requestId !== decisionRequestIdRef.current) {
+        return;
+      }
+
+      setDecisionError(
+        "Unable to reject this world structure suggestion right now.",
+      );
+    } finally {
+      if (requestId === decisionRequestIdRef.current) {
+        isDecidingRef.current = false;
+        setDecisionState("idle");
+      }
+
+      if (decisionAbortControllerRef.current === controller) {
+        decisionAbortControllerRef.current = null;
+      }
+    }
+  }, [nodeId, router, suggestion, worldId]);
 
   const handleSend = useCallback(async () => {
     const content = input.trim();
-    if (!content || isStreamingRef.current || isGeneratingRef.current) {
+    if (
+      !content ||
+      isStreamingRef.current ||
+      isGeneratingRef.current ||
+      isDecidingRef.current
+    ) {
       return;
     }
 
@@ -431,13 +602,15 @@ export function RootPlanningChat({
     }
   };
 
+  const isDeciding = decisionState !== "idle";
   const canSend =
     input.trim().length > 0 &&
     input.trim().length <= MAX_MESSAGE_LENGTH &&
     !isStreaming &&
-    !isGenerating;
-
-  const canGenerate = !isStreaming && !isGenerating;
+    !isGenerating &&
+    !isDeciding;
+  const canGenerate =
+    !hasInitialStructure && !isStreaming && !isGenerating && !isDeciding;
   const showEmptyState = timeline.length === 0;
 
   return (
@@ -449,22 +622,24 @@ export function RootPlanningChat({
             Back to World Map
           </Link>
 
-          <button
-            type="button"
-            className="root-planning-chat__generate"
-            onClick={() => {
-              void handleGenerate();
-            }}
-            disabled={!canGenerate}
-            aria-busy={isGenerating}
-          >
-            {isGenerating ? (
-              <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />
-            ) : (
-              <Sparkles className="size-4" strokeWidth={1.75} />
-            )}
-            {suggestion ? "Regenerate Structure" : "Generate World Structure"}
-          </button>
+          {!hasInitialStructure ? (
+            <button
+              type="button"
+              className="root-planning-chat__generate"
+              onClick={() => {
+                void handleGenerate();
+              }}
+              disabled={!canGenerate}
+              aria-busy={isGenerating}
+            >
+              {isGenerating ? (
+                <Loader2 className="size-4 animate-spin" strokeWidth={1.75} />
+              ) : (
+                <Sparkles className="size-4" strokeWidth={1.75} />
+              )}
+              {suggestion ? "Regenerate Structure" : "Generate World Structure"}
+            </button>
+          ) : null}
         </div>
 
         <div className="root-planning-chat__heading">
@@ -508,7 +683,20 @@ export function RootPlanningChat({
                   key={`suggestion-${item.suggestion.id}`}
                   className="root-planning-chat__timeline-item root-planning-chat__timeline-item--suggestion"
                 >
-                  <BranchSuggestionCard suggestion={item.suggestion} />
+                  <BranchSuggestionCard
+                    suggestion={item.suggestion}
+                    onApprove={() => {
+                      void handleApprove();
+                    }}
+                    onReject={() => {
+                      void handleReject();
+                    }}
+                    decisionState={decisionState}
+                    decisionError={decisionError}
+                    actionsDisabled={
+                      isStreaming || isGenerating || isDeciding
+                    }
+                  />
                 </div>
               );
             }
@@ -578,7 +766,7 @@ export function RootPlanningChat({
           placeholder="Describe the world you want to plan…"
           rows={4}
           maxLength={MAX_MESSAGE_LENGTH}
-          disabled={isStreaming || isGenerating}
+          disabled={isStreaming || isGenerating || isDeciding}
           aria-describedby={`${composerId}-hint`}
         />
         <div className="root-planning-chat__composer-footer">

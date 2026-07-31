@@ -14,6 +14,8 @@ export const branchSuggestionApiErrorCodeSchema = z.enum([
   "persistence_error",
   "aborted",
   "load_failed",
+  "suggestion_not_found",
+  "suggestion_not_pending",
 ]);
 
 export type BranchSuggestionApiErrorCode = z.infer<
@@ -77,6 +79,32 @@ export type GetBranchSuggestionsResponse = z.infer<
   typeof getBranchSuggestionsResponseSchema
 >;
 
+export const approveBranchSuggestionResponseSchema = z
+  .object({
+    outcome: z.literal("approved"),
+    suggestionId: z.uuid(),
+    createdNodeIds: z.array(z.uuid()),
+    idempotent: z.boolean(),
+  })
+  .strict();
+
+export type ApproveBranchSuggestionResponse = z.infer<
+  typeof approveBranchSuggestionResponseSchema
+>;
+
+export const rejectBranchSuggestionResponseSchema = z
+  .object({
+    outcome: z.literal("rejected"),
+    suggestionId: z.uuid(),
+    decidedAt: z.string(),
+    idempotent: z.boolean(),
+  })
+  .strict();
+
+export type RejectBranchSuggestionResponse = z.infer<
+  typeof rejectBranchSuggestionResponseSchema
+>;
+
 export const branchSuggestionApiErrorResponseSchema = z.object({
   error: z.string(),
   code: branchSuggestionApiErrorCodeSchema,
@@ -109,7 +137,12 @@ export const BRANCH_SUGGESTION_API_ERROR_MESSAGES = {
   persistence_error: "Unable to save the suggestion right now.",
   aborted: "Request was cancelled.",
   load_failed: "Unable to load suggestions right now.",
+  suggestion_not_found: "World structure suggestion not found.",
+  suggestion_not_pending: "This world structure suggestion can no longer be decided.",
 } as const satisfies Record<BranchSuggestionApiErrorCode, string>;
+
+export const BRANCH_SUGGESTION_DECISION_PERSISTENCE_ERROR_MESSAGE =
+  "Unable to complete this decision right now.";
 
 /** Client-disconnect convention for aborted branch-suggestion generation. */
 export const BRANCH_SUGGESTION_ABORTED_HTTP_STATUS = 499;
@@ -142,6 +175,18 @@ export function parseGetBranchSuggestionsResponse(
   raw: unknown,
 ): GetBranchSuggestionsResponse {
   return getBranchSuggestionsResponseSchema.parse(raw);
+}
+
+export function parseApproveBranchSuggestionResponse(
+  raw: unknown,
+): ApproveBranchSuggestionResponse {
+  return approveBranchSuggestionResponseSchema.parse(raw);
+}
+
+export function parseRejectBranchSuggestionResponse(
+  raw: unknown,
+): RejectBranchSuggestionResponse {
+  return rejectBranchSuggestionResponseSchema.parse(raw);
 }
 
 export function parseBranchSuggestionApiErrorResponse(

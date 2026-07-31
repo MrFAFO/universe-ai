@@ -114,3 +114,10 @@ export interface ApproveBranchSuggestionResult {
   created_node_ids: string[];
   idempotent: boolean;
 }
+
+export interface RejectBranchSuggestionResult {
+  suggestion_id: string;
+  status: "rejected";
+  decided_at: string;
+  idempotent: boolean;
+}

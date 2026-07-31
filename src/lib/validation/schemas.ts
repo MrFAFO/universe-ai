@@ -19,6 +19,10 @@ export const nodeIdParamSchema = z.uuid();
 
 export type NodeIdParam = z.infer<typeof nodeIdParamSchema>;
 
+export const suggestionIdParamSchema = z.uuid();
+
+export type SuggestionIdParam = z.infer<typeof suggestionIdParamSchema>;
+
 export const sendMessageInputSchema = z.object({
   content: z.string().trim().min(1).max(10_000),
 });
@@ -37,12 +41,31 @@ export const createWorldWithRootResultSchema = z.object({
   conversation_id: z.uuid(),
 });
 
-export const approveBranchSuggestionResultSchema = z.object({
-  suggestion_id: z.uuid(),
-  status: z.literal("approved"),
-  created_node_ids: z.array(z.uuid()),
-  idempotent: z.boolean(),
-});
+export const approveBranchSuggestionResultSchema = z
+  .object({
+    suggestion_id: z.uuid(),
+    status: z.literal("approved"),
+    created_node_ids: z.array(z.uuid()),
+    idempotent: z.boolean(),
+  })
+  .strict();
+
+export const rejectSuggestionInputSchema = z
+  .object({
+    suggestionId: z.uuid(),
+  })
+  .strict();
+
+export type RejectSuggestionInput = z.infer<typeof rejectSuggestionInputSchema>;
+
+export const rejectBranchSuggestionResultSchema = z
+  .object({
+    suggestion_id: z.uuid(),
+    status: z.literal("rejected"),
+    decided_at: z.string(),
+    idempotent: z.boolean(),
+  })
+  .strict();
 
 export const dbBranchSuggestionRowSchema = z.object({
   id: z.uuid(),

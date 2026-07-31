@@ -7,6 +7,7 @@ import { mapPendingSuggestionToDto } from "@/lib/chat/root-planning-page-data";
 import {
   RootPlanningNotFoundError,
   listConversationMessages,
+  listWorldNodeTitles,
   resolveRootPlanningConversation,
   type RootPlanningContext,
 } from "@/lib/db/chat";
@@ -37,6 +38,7 @@ export default async function RootPlanningChatPage({
   let context: RootPlanningContext | null = null;
   let initialMessages = null;
   let initialSuggestion = null;
+  let hasInitialStructure = false;
   let databaseError = false;
 
   try {
@@ -45,13 +47,16 @@ export default async function RootPlanningChatPage({
       parsedNodeId.data,
     );
 
-    const [persistedMessages, pendingSuggestions] = await Promise.all([
-      listConversationMessages(context.conversation.id),
-      listPendingBranchSuggestionsForConversation(context.conversation.id),
-    ]);
+    const [persistedMessages, pendingSuggestions, currentNodeTitles] =
+      await Promise.all([
+        listConversationMessages(context.conversation.id),
+        listPendingBranchSuggestionsForConversation(context.conversation.id),
+        listWorldNodeTitles(context.world.id),
+      ]);
 
     initialMessages = mapDbMessagesToRootPlanningChatMessages(persistedMessages);
     initialSuggestion = mapPendingSuggestionToDto(pendingSuggestions);
+    hasInitialStructure = currentNodeTitles.length > 0;
   } catch (error) {
     if (error instanceof RootPlanningNotFoundError) {
       notFound();
@@ -87,6 +92,7 @@ export default async function RootPlanningChatPage({
           nodeTitle={context.node.title}
           initialMessages={initialMessages}
           initialSuggestion={initialSuggestion}
+          hasInitialStructure={hasInitialStructure}
         />
       </div>
     </AppShell>

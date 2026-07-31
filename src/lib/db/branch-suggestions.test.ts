@@ -2,14 +2,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BranchSuggestionV1 } from "@/lib/ai/branch-suggestion";
 import {
   BranchSuggestionPayloadError,
+  BranchSuggestionNotFoundError,
+  BranchSuggestionNotPendingError,
+  assertBranchSuggestionOwnership,
+  approvePendingBranchSuggestion,
   beginBranchSuggestionAiRun,
   classifyBranchSuggestionAcquisitionError,
+  classifyBranchSuggestionDecisionError,
   classifyBranchSuggestionPersistenceError,
   GenerationInProgressError,
   getBranchSuggestionById,
   listPendingBranchSuggestionsForConversation,
   mapDbBranchSuggestionRow,
   PendingProposalExistsError,
+  rejectPendingBranchSuggestion,
   replacePendingBranchSuggestion,
   StructureAlreadyExistsError,
 } from "@/lib/db/branch-suggestions";
@@ -74,6 +80,8 @@ function createQueryBuilder(result: QueryResult) {
 const mockFrom = vi.fn();
 const mockReplaceRpc = vi.fn();
 const mockBeginRpc = vi.fn();
+const mockApproveRpc = vi.fn();
+const mockRejectRpc = vi.fn();
 
 vi.mock("@/lib/db/client", () => ({
   createSupabaseServerClient: () => ({
@@ -84,6 +92,8 @@ vi.mock("@/lib/db/client", () => ({
 vi.mock("@/lib/db/rpc", () => ({
   replacePendingBranchSuggestion: (...args: unknown[]) => mockReplaceRpc(...args),
   beginBranchSuggestionAiRun: (...args: unknown[]) => mockBeginRpc(...args),
+  approveBranchSuggestion: (...args: unknown[]) => mockApproveRpc(...args),
+  rejectBranchSuggestion: (...args: unknown[]) => mockRejectRpc(...args),
 }));
 
 describe("mapDbBranchSuggestionRow", () => {
@@ -505,6 +515,160 @@ describe("getBranchSuggestionById", () => {
 
     await expect(getBranchSuggestionById(suggestionId)).rejects.toThrow(
       DatabaseError,
+    );
+  });
+});
+
+const ownershipContext = {
+  world: { id: worldId },
+  conversation: { id: conversationId },
+  node: { id: parentNodeId },
+};
+
+describe("assertBranchSuggestionOwnership", () => {
+  it("passes when world, conversation and parent node match", () => {
+    expect(() =>
+      assertBranchSuggestionOwnership(ownershipContext, {
+        id: suggestionId,
+        worldId,
+        conversationId,
+        parentNodeId,
+        aiRunId,
+        status: "pending",
+        schemaVersion: 1,
+        payload: validPayload,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }),
+    ).not.toThrow();
+  });
+
+  it("throws BranchSuggestionNotFoundError on ownership mismatch", () => {
+    expect(() =>
+      assertBranchSuggestionOwnership(ownershipContext, {
+        id: suggestionId,
+        worldId: "11111111-1111-4111-8111-111111111111",
+        conversationId,
+        parentNodeId,
+        aiRunId,
+        status: "pending",
+        schemaVersion: 1,
+        payload: validPayload,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }),
+    ).toThrow(BranchSuggestionNotFoundError);
+  });
+});
+
+describe("classifyBranchSuggestionDecisionError", () => {
+  it("maps not found messages", () => {
+    expect(() =>
+      classifyBranchSuggestionDecisionError(new Error("Suggestion not found")),
+    ).toThrow(BranchSuggestionNotFoundError);
+  });
+
+  it("maps decision conflict messages", () => {
+    expect(() =>
+      classifyBranchSuggestionDecisionError(
+        new Error("Suggestion has already been approved"),
+      ),
+    ).toThrow(BranchSuggestionNotPendingError);
+  });
+
+  it("maps structure_already_exists messages", () => {
+    expect(() =>
+      classifyBranchSuggestionDecisionError(new Error("structure_already_exists")),
+    ).toThrow(StructureAlreadyExistsError);
+  });
+
+  it("maps unknown errors to DatabaseError", () => {
+    expect(() =>
+      classifyBranchSuggestionDecisionError(new Error("unexpected failure")),
+    ).toThrow(DatabaseError);
+  });
+
+  it("does not misclassify similar but non-exact messages", () => {
+    expect(() =>
+      classifyBranchSuggestionDecisionError(
+        new Error("Unexpected: Suggestion is not pending"),
+      ),
+    ).toThrow(DatabaseError);
+
+    expect(() =>
+      classifyBranchSuggestionDecisionError(
+        new Error("Suggestion not found while processing another record"),
+      ),
+    ).toThrow(DatabaseError);
+  });
+
+  it("maps non-Error failures to DatabaseError", () => {
+    expect(() =>
+      classifyBranchSuggestionDecisionError({ code: "P0001" }),
+    ).toThrow(DatabaseError);
+  });
+});
+
+describe("approvePendingBranchSuggestion", () => {
+  beforeEach(() => {
+    mockApproveRpc.mockReset();
+  });
+
+  it("returns parsed approval results", async () => {
+    mockApproveRpc.mockResolvedValue({
+      suggestion_id: suggestionId,
+      status: "approved",
+      created_node_ids: [parentNodeId],
+      idempotent: false,
+    });
+
+    await expect(
+      approvePendingBranchSuggestion(suggestionId),
+    ).resolves.toEqual({
+      suggestion_id: suggestionId,
+      status: "approved",
+      created_node_ids: [parentNodeId],
+      idempotent: false,
+    });
+  });
+
+  it("classifies not pending approval failures", async () => {
+    mockApproveRpc.mockRejectedValue(new Error("Suggestion is not pending"));
+
+    await expect(approvePendingBranchSuggestion(suggestionId)).rejects.toThrow(
+      BranchSuggestionNotPendingError,
+    );
+  });
+});
+
+describe("rejectPendingBranchSuggestion", () => {
+  beforeEach(() => {
+    mockRejectRpc.mockReset();
+  });
+
+  it("returns parsed rejection results", async () => {
+    mockRejectRpc.mockResolvedValue({
+      suggestion_id: suggestionId,
+      status: "rejected",
+      decided_at: "2026-01-02T00:00:00.000Z",
+      idempotent: true,
+    });
+
+    await expect(
+      rejectPendingBranchSuggestion(suggestionId),
+    ).resolves.toEqual({
+      suggestion_id: suggestionId,
+      status: "rejected",
+      decided_at: "2026-01-02T00:00:00.000Z",
+      idempotent: true,
+    });
+  });
+
+  it("classifies not pending rejection failures", async () => {
+    mockRejectRpc.mockRejectedValue(
+      new Error("Suggestion has already been rejected"),
+    );
+
+    await expect(rejectPendingBranchSuggestion(suggestionId)).rejects.toThrow(
+      BranchSuggestionNotPendingError,
     );
   });
 });

@@ -7,7 +7,10 @@ import {
   createWorldInputSchema,
   createWorldWithRootResultSchema,
   nodeIdParamSchema,
+  rejectBranchSuggestionResultSchema,
+  rejectSuggestionInputSchema,
   sendMessageInputSchema,
+  suggestionIdParamSchema,
   worldIdParamSchema,
 } from "@/lib/validation/schemas";
 
@@ -32,6 +35,35 @@ describe("approveSuggestionInputSchema", () => {
   it("accepts a suggestion id", () => {
     const result = approveSuggestionInputSchema.parse({ suggestionId });
     expect(result.suggestionId).toBe(suggestionId);
+  });
+});
+
+describe("rejectSuggestionInputSchema", () => {
+  it("accepts a suggestion id", () => {
+    const result = rejectSuggestionInputSchema.parse({ suggestionId });
+    expect(result.suggestionId).toBe(suggestionId);
+  });
+
+  it("rejects non-uuid ids", () => {
+    expect(() =>
+      rejectSuggestionInputSchema.parse({ suggestionId: "not-a-uuid" }),
+    ).toThrow();
+  });
+
+  it("rejects unexpected additional fields", () => {
+    expect(() =>
+      rejectSuggestionInputSchema.parse({ suggestionId, extra: true }),
+    ).toThrow();
+  });
+});
+
+describe("suggestionIdParamSchema", () => {
+  it("accepts a UUID suggestion id", () => {
+    expect(suggestionIdParamSchema.parse(suggestionId)).toBe(suggestionId);
+  });
+
+  it("rejects non-uuid ids", () => {
+    expect(() => suggestionIdParamSchema.parse("proposal-1")).toThrow();
   });
 });
 
@@ -103,6 +135,63 @@ describe("RPC result schemas", () => {
     });
 
     expect(result.created_node_ids).toEqual([nodeId]);
+  });
+
+  it("rejects approve_branch_suggestion result with wrong status", () => {
+    expect(() =>
+      approveBranchSuggestionResultSchema.parse({
+        suggestion_id: suggestionId,
+        status: "rejected",
+        created_node_ids: [nodeId],
+        idempotent: false,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects approve_branch_suggestion result with unexpected fields", () => {
+    expect(() =>
+      approveBranchSuggestionResultSchema.parse({
+        suggestion_id: suggestionId,
+        status: "approved",
+        created_node_ids: [nodeId],
+        idempotent: false,
+        extra: true,
+      }),
+    ).toThrow();
+  });
+
+  it("parses reject_branch_suggestion result", () => {
+    const result = rejectBranchSuggestionResultSchema.parse({
+      suggestion_id: suggestionId,
+      status: "rejected",
+      decided_at: "2026-01-02T00:00:00.000Z",
+      idempotent: false,
+    });
+
+    expect(result.decided_at).toBe("2026-01-02T00:00:00.000Z");
+  });
+
+  it("rejects reject_branch_suggestion result with invalid UUID", () => {
+    expect(() =>
+      rejectBranchSuggestionResultSchema.parse({
+        suggestion_id: "not-a-uuid",
+        status: "rejected",
+        decided_at: "2026-01-02T00:00:00.000Z",
+        idempotent: false,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects reject_branch_suggestion result with unexpected fields", () => {
+    expect(() =>
+      rejectBranchSuggestionResultSchema.parse({
+        suggestion_id: suggestionId,
+        status: "rejected",
+        decided_at: "2026-01-02T00:00:00.000Z",
+        idempotent: true,
+        extra: true,
+      }),
+    ).toThrow();
   });
 
   it("parses begin_branch_suggestion_ai_run result", () => {

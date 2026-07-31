@@ -3,14 +3,17 @@ import type {
   ApproveBranchSuggestionResult,
   CreateWorldWithRootResult,
   DbBranchSuggestion,
+  RejectBranchSuggestionResult,
 } from "@/types/db";
 import {
   approveBranchSuggestionResultSchema,
   beginBranchSuggestionAiRunResultSchema,
   createWorldWithRootResultSchema,
   dbBranchSuggestionRowSchema,
+  rejectBranchSuggestionResultSchema,
   type ApproveSuggestionInput,
   type CreateWorldInput,
+  type RejectSuggestionInput,
 } from "@/lib/validation/schemas";
 import { DatabaseError } from "./errors";
 import { createSupabaseServerClient } from "./client";
@@ -57,6 +60,21 @@ export async function approveBranchSuggestion(
   }
 
   return approveBranchSuggestionResultSchema.parse(data);
+}
+
+export async function rejectBranchSuggestion(
+  input: RejectSuggestionInput,
+): Promise<RejectBranchSuggestionResult> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("reject_branch_suggestion", {
+    p_suggestion_id: input.suggestionId,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return rejectBranchSuggestionResultSchema.parse(data);
 }
 
 export async function replacePendingBranchSuggestion(
