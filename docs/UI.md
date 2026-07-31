@@ -134,6 +134,62 @@ Available when a pending proposal exists. Replaces the current pending proposal 
 
 Available only on a pending proposal. Approve creates topic nodes on the World Map atomically. Reject marks the proposal rejected. Both require explicit user action.
 
+## Non-root Planning Chat (Stage E — planned, not implemented)
+
+Topic Nodes will open their own Planning chat at `/worlds/[worldId]/nodes/[nodeId]`.
+
+**Planned behaviour:**
+
+- Root Planning remains visually and behaviourally distinct from Topic Node Planning.
+- Each Topic Node has one persistent Planning conversation.
+- Message history loads chronologically and survives refresh and reopen.
+- Ancestor-path context is injected into model input but **not** presented as editable messages in the timeline.
+- No structure proposal cards, Generate World Structure, or branch-suggestion flow in non-root Planning.
+- Streaming, composer, and safe error handling follow Root Planning patterns.
+
+Do not implement relation UI or relation context in Stage E.
+
+## Secondary Relations (Stage F+ — planned, not implemented)
+
+Relation management UI does not exist today. The World Map already renders relation edges and filters when data is present. **No application write path exists** — normal product flows do not create relation rows. Manually seeded database rows can already be loaded and rendered.
+
+### Legacy relation filters (Stage F)
+
+The database enum and existing UI currently know: `dependency`, `shared-feature`, `shared-contract`, `reference`. Only `dependency` and `reference` are approved for new writes.
+
+- Relation **creation** controls expose only `dependency` and `reference`.
+- `shared-feature` and `shared-contract` are read-only legacy schema values.
+- Their filter/view controls should **not** be shown by default when no legacy rows exist.
+- If legacy rows exist in the future, they may be shown read-only.
+- Do not remove the PostgreSQL enum values.
+
+### Details panel as primary relation surface (Stage F)
+
+The node details panel is the primary place to manage relations:
+
+- List incoming and outgoing relations with **direction visible** (source → target labels or equivalent incoming/outgoing presentation).
+- Each relation shows its **note** explaining why the connection exists.
+- Navigate to the connected node from the list.
+- Create, edit note, and archive actions.
+
+### World Map relation display (Stage F)
+
+- Active relations may remain visible through the existing per-type filters (`dependency`, `reference` by default), opacity sliders, and relation graph views.
+- Legacy-type filters (`shared-feature`, `shared-contract`) hidden by default unless legacy rows exist (read-only if shown).
+- Avoid graph clutter: hierarchy edges remain stronger than secondary edges; per-node edge caps may apply.
+- Archived relations are **not** rendered as active edges.
+- Pending AI relation proposals are **not** rendered as edges (Stage G).
+
+### AI relation proposals (Stage G — planned)
+
+- Proposals appear as reviewed proposal cards (similar pattern to structure proposal cards), not as immediate map edges.
+- User approves, edits, or rejects before any relation becomes active.
+
+### Impact review indicators (Stage H — planned)
+
+- "Needs Review" indicators on relations affected by meaningful node changes.
+- Not part of Stage F.
+
 ## Interaction Principles
 
 - One click selects a node.

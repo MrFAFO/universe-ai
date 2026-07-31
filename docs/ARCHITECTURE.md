@@ -1,6 +1,8 @@
 # Universe AI — Architecture
 
-Durable technical architecture for Stage D and beyond. For product context see `docs/PROJECT.md`. For UI behavior see `docs/UI.md`. For implementation progress see `docs/CURRENT_STATE.md`.
+Durable technical architecture for Stage D and beyond. For product context see `docs/PROJECT.md`. For UI behavior see `docs/UI.md`. For implementation progress and the **Resume Here** handoff see `docs/CURRENT_STATE.md`.
+
+**Post-Stage-D status:** Stage D is **implemented** and merged into `main` at `95e09f6`. Stage E (Non-root Planning) is the **immediate next** implementation stage. Stages F–I are **approved but not implemented**.
 
 ---
 
@@ -38,18 +40,24 @@ Structural change rules:
 
 - Generate with Assumptions, offered after two insufficient Discovery rounds
 
-### Post-D (deferred)
+### Post-D roadmap (approved sequence)
 
-- Updating an existing structure
-- Structure Reconciliation
-- KEEP / UPDATE / ADD / MOVE / ARCHIVE operations
-- `nodes.archived_at`
-- `worlds.structure_revision`
+| Stage | Capability | Status |
+|---|---|---|
+| **E** | Non-root Planning | Approved — **next** |
+| **F** | Secondary Relations MVP | Approved — not implemented |
+| **G** | AI Relation Proposals | Approved — not implemented |
+| **H** | Impact Review | Approved — not implemented |
+| **I** | Structure Reconciliation | Approved — not implemented |
+
+**Deferred indefinitely or until later stages:**
+
+- Execution conversations
 - Full Context Engine
-- Secondary relation generation
-- Cross-node impact analysis
 - SPLIT / MERGE
 - `conversation_events` table
+- Generate with Assumptions (optional; deliberately deferred from Stage D)
+- First-class Contract or Shared Artifact entity
 
 ---
 
@@ -493,6 +501,255 @@ Exact commit grouping may be adjusted. Migration sequencing and dependency order
 
 ---
 
+## Post-Stage-D state (implemented)
+
+Stage D is complete. The following are **implemented** and must not regress:
+
+- Structured initial World structure proposals (`BranchSuggestionV1`)
+- Readiness assessment and Discovery (`StructureAssessmentV1`)
+- Chronological proposal cards in Root Planning timeline
+- One pending proposal per Root Planning conversation (partial unique index)
+- Regenerate replacement via `replace_pending_branch_suggestion`
+- Reject and Approve via atomic RPCs with idempotent re-approve/re-reject
+- Atomic AI-run acquisition (`begin_branch_suggestion_ai_run`) before OpenAI
+- Initial-structure-only enforcement (`structure_already_exists`)
+- Bounded stale-run recovery (15-minute threshold)
+- World Map refresh after approval
+- Generate hidden after initial structure exists
+- Code-owned Root Planning prompt and compact World brief
+
+Accepted at commit `95e09f6`. See `docs/CURRENT_STATE.md` for validation results.
+
+---
+
+## Stage E — Non-root Planning (approved, not implemented)
+
+### Purpose
+
+Make every Topic Node a real planning workspace with its own persistent Planning conversation, reusing proven streaming and persistence infrastructure without weakening Root Planning invariants.
+
+### Boundaries
+
+**In scope:**
+
+- One Planning conversation per Topic Node (`conversation.kind = 'planning'`, node `kind = 'topic'`)
+- Dedicated non-root resolver — separate from Root Planning route handlers and invariants
+- Reuse Stage C streaming (`root-planning-chat.ts` patterns), NDJSON protocol, message persistence, and `ai_runs` lifecycle where safe
+- Compact **ancestor-path context** injected into model input (deterministic, pure, unit-testable)
+- Chronological message ordering by `ordinal`; history survives refresh and reopen
+- Root Planning behaviour unchanged
+
+**Explicitly out of scope:**
+
+- Execution conversations
+- Relation detection, creation, editing, or context injection
+- Structure Reconciliation and Update Existing Structure
+- Full Context Engine
+- Authentication
+- New dependencies unless technically unavoidable and explicitly approved
+
+### Resolver separation (architectural invariant)
+
+Root Planning and non-root Planning must use **distinct resolvers**. Root Planning invariants — Root node only, initial-structure proposal flow, one pending `branch_suggestion` per conversation — must not be weakened to accommodate Topic Nodes.
+
+Non-root resolver must reject:
+
+- Root nodes (use Root Planning flow)
+- Cross-World node/conversation mismatches
+- Non-topic node kinds
+
+### Ancestor-path context
+
+Inject a compact, code-computed block on every non-root Planning request:
+
+- World name and description
+- Ancestor chain from Root to current node (title, goal; capped)
+- Current node title, description, goal
+
+Same contextual-data-not-instructions delimiter pattern as the Root Planning World Brief. No new tables required for Stage E.
+
+### Acceptance criteria (target)
+
+*Automated:* cross-World rejection; resolver separation; topic-only flow; one conversation per node; message persistence and ordinal ordering; deterministic ancestor context; Root Planning regression tests pass.
+
+*Manual:* open Topic Node Planning chat; send/receive messages; refresh and reopen; ancestor context influences responses; Root Planning unchanged.
+
+---
+
+## Secondary relations (approved architecture)
+
+### Current schema (implemented, read-only)
+
+`node_relations` exists from Stage A. Exact current schema (from `supabase/migrations/20260322000000_initial_schema.sql`):
+
+```sql
+-- node_relations (secondary relations only; hierarchy is nodes.parent_id)
+
+create table public.node_relations (
+  id uuid primary key default gen_random_uuid(),
+  world_id uuid not null references public.worlds (id) on delete cascade,
+  source_node_id uuid not null references public.nodes (id) on delete cascade,
+  target_node_id uuid not null references public.nodes (id) on delete cascade,
+  type public.relation_type not null,
+  created_at timestamptz not null default now(),
+  constraint node_relations_not_self check (source_node_id <> target_node_id)
+);
+
+create index node_relations_world_id_idx on public.node_relations (world_id);
+create index node_relations_source_idx on public.node_relations (source_node_id);
+create index node_relations_target_idx on public.node_relations (target_node_id);
+```
+
+Enum `relation_type`: `dependency`, `shared-feature`, `shared-contract`, `reference`.
+
+**No application write path exists today.** Normal product flows do not create relation rows. Manually seeded database rows can already be loaded and rendered by the existing World Map relation UI (filters, opacity, per-type graphs, edge overlay).
+
+### Approved product taxonomy (new writes)
+
+Only `dependency` and `reference` are approved for new product writes. **Both are directed** (source → target).
+
+| Type | Semantics | Context role |
+|---|---|---|
+| `dependency` | Source depends on target; target provides prerequisite, decision, deliverable, or progress | Target goal/status may indicate blocking |
+| `reference` | Source should receive relevant context from target; not blocked | Target description conveys relevance |
+
+Information flows from **target to source** in both types.
+
+**Legacy enum values** `shared-feature` and `shared-contract` remain in PostgreSQL permanently. They are **not approved for new writes**. Do not propose enum-removal migrations.
+
+- `shared-feature` → future overlap/restructuring signal (Stage H / reconciliation), not a persisted relation type.
+- `shared-contract` → represent through an owning deliverable Node with `dependency` relations from consumers.
+
+### Legacy relation filters (Stage F)
+
+The database enum and existing UI currently know all four values: `dependency`, `shared-feature`, `shared-contract`, `reference`. Only `dependency` and `reference` are approved for new writes.
+
+Stage F behaviour:
+
+- Relation **creation** controls expose only `dependency` and `reference`.
+- `shared-feature` and `shared-contract` are read-only legacy schema values.
+- Their filter/view controls should **not** be shown by default when no legacy rows exist.
+- If legacy rows exist in the future, they may be shown read-only.
+- Do not remove the PostgreSQL enum values.
+
+### Proposal versus approved state (architectural invariant)
+
+**`node_relations` contains only approved or directly user-created World facts.**
+
+Pending, rejected, or superseded AI relation proposals must **never** be stored as active `node_relations` rows. Future AI relation proposals (Stage G) use a **separate reviewed proposal artifact**, mirroring the `branch_suggestions` pattern established in Stage D:
+
+- Proposal artifact holds `pending` → `approved` | `rejected` | `superseded` lifecycle
+- Approval applies validated relations atomically via `SECURITY DEFINER` RPC
+- Map readers and context builders query only active `node_relations` — no status filter needed because proposals live elsewhere
+
+This boundary prevents proposed state from leaking into map rendering or AI context.
+
+### Relation lifecycle (approved direction, not yet implemented)
+
+Relations should be **archived** rather than silently hard-deleted. Stage F migration (minimal — keep proposal-related columns out until Stage G):
+
+| Column | Stage | Purpose |
+|---|---|---|
+| `note` | F | Required short explanation of why the link exists |
+| `updated_at` | F | Track edits |
+| `archived_at` | F | Soft-archive without losing history |
+| `origin` | G | At least `manual` and `ai_approved` — introduced with AI proposal approval behaviour |
+| `created_by_suggestion_id` | G | Audit trail for AI-approved relations (nullable) — requires proposal artifact foreign target |
+
+Partial unique indexes (Stage F): prevent duplicate **live** (non-archived) relations — directed unique on `(source_node_id, target_node_id, type)` where `archived_at is null` for `dependency`; equivalent constraint for `reference` preserving direction.
+
+### Manual relation creation (Stage F)
+
+Must use a validated atomic RPC/server operation. No AI calls. Validations:
+
+- Both endpoints belong to the same World
+- Neither endpoint is self
+- Type is `dependency` or `reference` only
+- Note is present and within character cap
+- No duplicate live relation
+- Direction preserved
+
+User-initiated structural edits do not require an AI proposal (`AGENTS.md`).
+
+### Relation context rules (Stage F)
+
+**Architectural invariants (durable):**
+
+- Only **active** (non-archived) relations affect context
+- **Depth 1 only** — no recursive relation traversal
+- Information flows from **target to source**
+- Never load full related conversations
+- Pending, rejected, and archived relations never affect context
+
+**Tunable defaults (not permanent constants):**
+
+- Maximum related nodes per request
+- Character budget for relation context block
+- Deterministic ordering rule (e.g. by type, then target title)
+
+Projection by type:
+
+- `dependency` → target title, goal, status (is it blocking?)
+- `reference` → target title, description (what is relevant?)
+
+Inject into non-root Planning context using the same contextual-data-not-instructions pattern as the World Brief. Node `description` and `goal` columns are sufficient; a decisions table or stored AI summaries are **not** prerequisites.
+
+### Bounded impact review (Stage H, approved direction)
+
+When a node undergoes a **meaningful structural change**, directly connected relations (depth 1) may become questionable. Meaningful changes include: goal change, material description change, move, archive, later split/merge, reversal of a decision used as relation evidence.
+
+**Not meaningful:** position changes, progress changes, ordinary chat messages.
+
+Impact analysis is bounded to directly connected relations. Depth 1 is a durable invariant — no recursive graph-wide propagation. Changes create review work (confirm, edit, replace, or archive the relation), not automatic cascading mutations.
+
+"Needs Review" indicators are Stage H UX; not part of Stage F.
+
+### Relations and Structure Reconciliation (Stage I)
+
+Structure Reconciliation will eventually propose node operations (KEEP, UPDATE, ADD, MOVE, ARCHIVE; later SPLIT, MERGE) and relation operations (ADD_RELATION, UPDATE_RELATION, ARCHIVE_RELATION, REVIEW_RELATION). It requires deferred schema (`nodes.archived_at`, `worlds.structure_revision`, reconciliation RPC). Final proposal model is not yet specified.
+
+Relations MVP (Stage F) and non-root Planning (Stage E) must precede reconciliation. Relation staleness detection belongs in Stage H, not Stage F.
+
+---
+
+## Post-D implementation sequence
+
+Exact commit grouping may be adjusted. Stage order must be preserved.
+
+### Stage E — Non-root Planning
+
+1. Define final resolver boundaries and route shape.
+2. Implement Topic Node Planning conversation resolution.
+3. Add ancestor-path context builder.
+4. Wire streaming and persistence; verify Root Planning regression.
+
+### Stage F — Secondary Relations MVP
+
+1. Migration: add `note`, `updated_at`, `archived_at`; partial unique indexes on live relations.
+2. Atomic RPCs: create, update note, archive relation.
+3. Details panel relation management UI (creation limited to `dependency` and `reference`; legacy filters hidden by default).
+4. Feed existing map relation rendering from real data (including any manually seeded rows).
+5. Inject depth-1 relation context into non-root Planning.
+
+### Stage G — AI Relation Proposals
+
+1. Separate relation proposal artifact and lifecycle.
+2. Explicit user-triggered detection; evidence requirements.
+3. Approve/reject with atomic apply RPC.
+4. Migration: add `origin`, `created_by_suggestion_id` to `node_relations` (with proposal artifact foreign target).
+
+### Stage H — Impact Review
+
+1. Detect meaningful node changes affecting depth-1 relations.
+2. Surface review indicators; user confirms/edits/archives.
+
+### Stage I — Structure Reconciliation
+
+1. Schema: `nodes.archived_at`, `worlds.structure_revision`, reconciliation RPC.
+2. Update Existing Structure flow with KEEP/UPDATE/ADD/MOVE/ARCHIVE and relation operations.
+
+---
+
 ## Documentation map
 
 | File | Contains |
@@ -501,4 +758,4 @@ Exact commit grouping may be adjusted. Migration sequencing and dependency order
 | `docs/PROJECT.md` | Product truth, glossary, cross-domain requirement |
 | `docs/UI.md` | Visual identity, timeline placement, proposal card states |
 | `docs/ARCHITECTURE.md` | This file — durable technical architecture |
-| `docs/CURRENT_STATE.md` | Progress log only |
+| `docs/CURRENT_STATE.md` | Primary handoff — current stage, Resume Here, roadmap |
