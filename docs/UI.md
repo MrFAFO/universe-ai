@@ -169,8 +169,17 @@ The node details panel is the primary place to manage relations:
 
 - List incoming and outgoing relations with **direction visible** (source → target labels or equivalent incoming/outgoing presentation).
 - Each relation shows its **note** explaining why the connection exists.
-- Navigate to the connected node from the list.
+- For `dependency` relations, the note should cover: what may proceed immediately; what remains provisional or blocked; what exact output the target must provide.
+- Navigate to the connected node from the list (clear link to dependency targets).
 - Create, edit note, and archive actions.
+- Relations between direct Root children are supported — Root children are not assumed independent.
+
+### Dependency-aware Planning UI (Stage F — planned)
+
+- Topic Planning conversations remain accessible when dependencies exist; the conversation is not blocked.
+- Show incoming dependencies with navigation to the target Node.
+- AI responses should distinguish work that can proceed now, provisional work, and work waiting for a dependency output.
+- Hard blocking of work actions is future Execution only — not Stage F Topic Planning.
 
 ### World Map relation display (Stage F)
 
@@ -182,12 +191,23 @@ The node details panel is the primary place to manage relations:
 
 ### AI relation proposals (Stage G — planned)
 
+Two explicit analysis modes (both user-triggered; neither runs automatically during structure approval):
+
+**Initial relation analysis** — available after initial structure is approved. Trigger from Root Planning or World Map. Primarily analyzes relations between direct Root children using Root Planning content and node metadata. Does not require completed Topic Planning conversations.
+
+**Deep relation analysis** — available once Topic Planning conversations contain meaningful content. Proposes more precise additions, changes, or archival. Explicitly user-triggered; does not run after every message.
+
 - Proposals appear as reviewed proposal cards (similar pattern to structure proposal cards), not as immediate map edges.
 - User approves, edits, or rejects before any relation becomes active.
+- AI never creates active relations without user approval.
 
-### Impact review indicators (Stage H — planned)
+### Impact review and dependency updates (Stage H — planned)
 
-- "Needs Review" indicators on relations affected by meaningful node changes.
+- "Needs Review" indicators on dependent Nodes when a meaningful committed change affects a relation.
+- Planned surfaces: World Map badge; persistent banner in dependent Planning chat; chronological dependency-update event (visually distinct from user/assistant messages); relation details showing change source; navigation to changed target Node.
+- Target changes must not silently rewrite dependent conversations or plans.
+- AI may propose downstream updates; user must approve before existing work is modified.
+- Historical chat messages are never rewritten retroactively.
 - Not part of Stage F.
 
 ## Interaction Principles

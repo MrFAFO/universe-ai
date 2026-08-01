@@ -608,9 +608,29 @@ Enum `relation_type`: `dependency`, `shared-feature`, `shared-contract`, `refere
 
 Only `dependency` and `reference` are approved for new product writes. **Both are directed** (source → target).
 
+**Root children may have secondary relations.** Direct children of the Root are not assumed independent; cross-workstream `dependency` and `reference` links between them are expected and valuable.
+
+#### `dependency` semantics
+
+A `dependency` does **not** necessarily mean that no work may begin on the source node.
+
+It means: the **source** requires a decision, deliverable, constraint, or progress from the **target** in order to **complete, validate, or finalize a material part** of its work. Early exploration and provisional planning on the source may proceed; specific completion or validation may remain blocked or provisional until the target output exists.
+
+Hard blocking of work belongs only to **future Execution** behaviour — not Topic Planning. A Topic Planning conversation remains accessible even when dependencies exist.
+
+**Required relation note** (every `dependency`, manual or AI-approved) should explain:
+
+- What may proceed immediately on the source
+- What remains provisional or blocked
+- What exact output is required from the target
+
+#### `reference` semantics
+
+The source should receive relevant context from the target. The source is not blocked by the target. Does not imply ownership, hierarchy, or sequencing.
+
 | Type | Semantics | Context role |
 |---|---|---|
-| `dependency` | Source depends on target; target provides prerequisite, decision, deliverable, or progress | Target goal/status may indicate blocking |
+| `dependency` | Source requires target output to complete, validate, or finalize material work | Target goal/status and relation note convey what is provisional vs blocked |
 | `reference` | Source should receive relevant context from target; not blocked | Target description conveys relevance |
 
 Information flows from **target to source** in both types.
@@ -650,7 +670,7 @@ Relations should be **archived** rather than silently hard-deleted. Stage F migr
 
 | Column | Stage | Purpose |
 |---|---|---|
-| `note` | F | Required short explanation of why the link exists |
+| `note` | F | Required short explanation; for `dependency`, must cover what may proceed, what is provisional/blocked, and required target output |
 | `updated_at` | F | Track edits |
 | `archived_at` | F | Soft-archive without losing history |
 | `origin` | G | At least `manual` and `ai_approved` — introduced with AI proposal approval behaviour |
@@ -665,7 +685,7 @@ Must use a validated atomic RPC/server operation. No AI calls. Validations:
 - Both endpoints belong to the same World
 - Neither endpoint is self
 - Type is `dependency` or `reference` only
-- Note is present and within character cap
+- Note is present and within character cap; for `dependency`, covers what may proceed, what is provisional/blocked, and required target output
 - No duplicate live relation
 - Direction preserved
 
@@ -689,20 +709,52 @@ User-initiated structural edits do not require an AI proposal (`AGENTS.md`).
 
 Projection by type:
 
-- `dependency` → target title, goal, status (is it blocking?)
+- `dependency` → target title, goal, status, and relation note (what is provisional vs blocked)
 - `reference` → target title, description (what is relevant?)
 
 Inject into non-root Planning context using the same contextual-data-not-instructions pattern as the World Brief. Node `description` and `goal` columns are sufficient; a decisions table or stored AI summaries are **not** prerequisites.
 
-### Bounded impact review (Stage H, approved direction)
+### Dependency-aware Planning (approved principles)
 
-When a node undergoes a **meaningful structural change**, directly connected relations (depth 1) may become questionable. Meaningful changes include: goal change, material description change, move, archive, later split/merge, reversal of a decision used as relation evidence.
+**Stage F** delivers: dependency visibility, navigation, bounded relation context, and provisional-work awareness in Topic Planning.
 
-**Not meaningful:** position changes, progress changes, ordinary chat messages.
+**Durable principles:**
 
-Impact analysis is bounded to directly connected relations. Depth 1 is a durable invariant — no recursive graph-wide propagation. Changes create review work (confirm, edit, replace, or archive the relation), not automatic cascading mutations.
+- A Topic Planning conversation remains accessible even when the Topic Node depends on another Node.
+- A dependency does not block the conversation itself.
+- It may prevent completing, validating, or finalizing specific parts of the work.
+- The AI should distinguish: work that can proceed now; work that is provisional; work waiting for a dependency output.
+- The user must not be forced to leave the current conversation.
+- The UI should provide a clear link to the dependency target.
+- Relation notes should explain what may proceed, what remains provisional or blocked, and what exact output the target must provide.
 
-"Needs Review" indicators are Stage H UX; not part of Stage F.
+**Hard blocking** of work actions belongs only to future Execution — not Topic Planning, not Stage F.
+
+### Bounded impact review and dependency updates (Stage H, approved direction)
+
+When a node undergoes a **meaningful committed change**, directly connected relations (depth 1) may become questionable or require downstream review.
+
+**Meaningful changes:** goal change, material description change, approved decisions, approved deliverables, move, archive, later split/merge, reversal of a decision used as relation evidence.
+
+**Not meaningful:** position changes, progress changes, ordinary chat messages. Draft conversation content does not automatically trigger downstream impact.
+
+**Dynamic-change principles:**
+
+- A target change must not silently rewrite dependent conversations, tasks, decisions, or plans.
+- It should create a durable **Dependency Update / Impact Review** item.
+- The dependent Node receives a **Needs Review** indicator.
+- The next AI request may receive the latest approved target context, clearly labelled as changed or possibly stale.
+- AI may propose affected changes, but the user must approve before existing work is modified.
+- Historical chat messages are never rewritten retroactively.
+- Automatic update events must be visually distinct from user and assistant messages.
+
+**Planned notification surfaces:** World Map badge or Needs Review indicator; persistent banner in the dependent Planning chat; chronological dependency-update event; relation details showing the source of the change; direct navigation to the changed target Node.
+
+Impact analysis is bounded to directly connected relations. Depth 1 is a durable invariant — no recursive graph-wide propagation. User confirms, edits, replaces, or archives affected relations.
+
+"Needs Review" indicators and dependency-update events are Stage H UX; not part of Stage F.
+
+**Open product decisions (require approval before Stage H):** dependency satisfaction states and transitions; whether satisfaction is user-set, artifact-driven, or AI-proposed and reviewed; exact storage model for dependency-update events; whether stale relations continue contributing context; future Execution actions that may be hard-blocked.
 
 ### Relations and Structure Reconciliation (Stage I)
 
@@ -730,18 +782,42 @@ Exact commit grouping may be adjusted. Stage order must be preserved.
 3. Details panel relation management UI (creation limited to `dependency` and `reference`; legacy filters hidden by default).
 4. Feed existing map relation rendering from real data (including any manually seeded rows).
 5. Inject depth-1 relation context into non-root Planning.
+6. Dependency visibility, navigation links to targets, and provisional-work awareness in Topic Planning.
 
 ### Stage G — AI Relation Proposals
 
+Two explicit analysis modes (both user-triggered; neither runs automatically during structure approval):
+
+**Initial relation analysis:**
+
+- Available after initial structure is approved.
+- Triggered explicitly from Root Planning or the World Map.
+- Primarily analyzes relations between direct Root children.
+- Uses Root Planning conversation content, World description, and node titles, descriptions, and goals.
+- Proposes only high-level relations supported by clear evidence.
+- Does not require completed non-root Planning conversations.
+
+**Deep relation analysis:**
+
+- Available once Topic Planning conversations contain meaningful content.
+- Uses deeper evidence to propose more precise additions, changes, or archival.
+- Explicitly user-triggered; does not run after every message.
+
+**Shared implementation:**
+
 1. Separate relation proposal artifact and lifecycle.
-2. Explicit user-triggered detection; evidence requirements.
-3. Approve/reject with atomic apply RPC.
+2. Evidence requirements; reject hallucinated ids, cross-World targets, self-links, duplicates.
+3. Approve/reject with atomic apply RPC. AI never creates active relations without user approval.
 4. Migration: add `origin`, `created_by_suggestion_id` to `node_relations` (with proposal artifact foreign target).
 
-### Stage H — Impact Review
+**Open product decision:** how “enough context” is determined for deep analysis eligibility; whether initial and deep analysis share one proposal artifact.
 
-1. Detect meaningful node changes affecting depth-1 relations.
-2. Surface review indicators; user confirms/edits/archives.
+### Stage H — Impact Review and Dependency Updates
+
+1. Detect meaningful committed changes affecting depth-1 relations.
+2. Create durable Dependency Update / Impact Review items.
+3. Surface Needs Review indicators and planned notification surfaces.
+4. User confirms, edits, replaces, or archives; AI proposals require approval before modifying existing work.
 
 ### Stage I — Structure Reconciliation
 

@@ -81,7 +81,7 @@ Non-root Planning is the immediate next capability because:
 - It produces the persistent Planning content that later relation detection, context transfer, and reconciliation depend on.
 - It can reuse proven streaming and persistence infrastructure without prematurely introducing relations or reconciliation complexity.
 
-Relations and reconciliation should follow real node-level Planning content, not precede it.
+Relations and reconciliation should follow real node-level Planning content where precision matters. **Initial** relation analysis (Stage G) may use Root Planning content and node metadata without completed Topic Planning conversations; **deep** analysis requires meaningful Topic Planning content. Relation **implementation** (Stage F) still follows Stage E.
 
 ## Cross-domain support
 
@@ -102,7 +102,7 @@ Universe AI must work professionally across project types, including:
 | **stage** | A phase or step within a workstream |
 | **responsibility** | Who or what owns an outcome |
 | **outcome** | What success looks like for an area |
-| **dependency** | What must happen or exist before something else can proceed |
+| **dependency** | A decision, deliverable, constraint, or progress output from another node required to complete, validate, or finalize a material part of this node's work |
 | **deliverable** | A concrete output from a workstream or stage |
 
 Do not assume frontend, backend, database, or software architecture unless the project conversation establishes a software context.
@@ -113,28 +113,37 @@ Do not assume frontend, backend, database, or software architecture unless the p
 
 The hierarchy (`parent_id`) is the single source of decomposition and ownership. Secondary relations are additive links between nodes that are not parent and child. They must never substitute for correct hierarchy placement.
 
+**Direct children of the Root may have secondary relations with each other.** Being a Root child does not imply those workstreams are independent. Cross-workstream dependencies and references are expected and valuable.
+
 ### Approved product relation types (new writes)
 
 Only two relation types are approved for new product writes. **Both are directed** (source → target):
 
 **`dependency`**
 
-- The **source** depends on the **target**.
-- The target provides a required prerequisite, decision, deliverable, or progress needed by the source.
-- May eventually influence blockers and readiness.
+- The **source** depends on the **target** (directed: source → target).
+- The source requires a decision, deliverable, constraint, or progress from the target in order to **complete, validate, or finalize a material part** of its work.
+- A dependency does **not** necessarily mean that no work may begin on the source node. Early exploration and provisional planning may proceed; specific completion or validation may remain blocked or provisional until the target output exists.
 - Does not imply ownership or parenthood.
+- May eventually influence blockers and readiness in future Execution — but **hard blocking belongs only to future Execution behaviour, not Topic Planning**.
 
-*Example (event planning):* "Venue Setup" depends on "Venue Contract Signed" — setup cannot proceed until the contract deliverable exists.
+*Example (event planning):* "Venue Setup" depends on "Venue Contract Signed" — preliminary planning may proceed, but final setup validation cannot be completed until the signed contract deliverable exists.
+
+**Required relation note** (every `dependency`, manual or AI-approved) should explain:
+
+- What may proceed immediately on the source
+- What remains provisional or blocked
+- What exact output is required from the target
 
 **`reference`**
 
-- The **source** should receive relevant context from the **target**.
+- The **source** should receive relevant context from the **target** (directed: source → target).
 - The source is **not** blocked by the target.
 - Does not imply ownership, hierarchy, or sequencing.
 
 *Example (book project):* "Chapter Draft" references "Character Bible" — the draft workspace should know character details without waiting on the bible to be finished.
 
-Information flows from **target to source** in both types. The difference is whether the source is blocked (`dependency`) or merely informed (`reference`).
+Information flows from **target to source** in both types. The difference is whether the source requires target output to finalize material work (`dependency`) or merely benefits from target context (`reference`).
 
 ### Legacy schema values (not for new writes)
 
@@ -150,15 +159,34 @@ Approved interpretation:
 Relations exist to:
 
 - **Transfer context** — send compact, relevant information from one branch to another without copying entire conversations.
-- **Surface blockers** — show when one area cannot proceed until another provides a prerequisite.
+- **Surface blockers** — show when completing or validating specific work on the source depends on output from the target (without blocking the Planning conversation itself).
 - **Enable cross-branch navigation** — move between related workstreams on the map and in the details panel.
 - **Create impact awareness** — flag when a node change may make an existing link questionable (Stage H).
 
-Every manually created relation requires a short explanatory note describing why the connection exists.
+Every manually created relation requires a short explanatory note. For `dependency` relations, the note should cover what may proceed, what remains provisional or blocked, and what output the target must provide.
+
+### Dependency-aware Planning (approved principles)
+
+**Durable principles (Topic Planning):**
+
+- A Topic Planning conversation remains accessible even when the Topic Node depends on another Node.
+- A dependency does not block the conversation itself.
+- It may prevent completing, validating, or finalizing specific parts of the work.
+- The AI should distinguish: work that can proceed now; work that is provisional; work waiting for a dependency output.
+- The user must not be forced to leave the current conversation.
+- The UI should provide a clear link to the dependency target.
+
+**Stage placement:** Stage F delivers dependency visibility, navigation, bounded context, and provisional-work awareness. Stage H delivers meaningful-change detection, Needs Review, durable update events, and reviewed downstream updates. Hard blocking belongs only to future Execution.
 
 ### Relation proposals and approved state
 
-AI may propose relations only after explicit user action (Stage G). Proposals remain separate from active World state until approved. Pending or rejected proposals must never appear on the map or in AI context.
+AI may propose relations only after explicit user action (Stage G). Proposals remain separate from active World state until approved. The AI never creates active relations without user approval. Pending or rejected proposals must never appear on the map or in AI context.
+
+**Stage G supports two explicit analysis modes** (both user-triggered; neither runs automatically during structure approval):
+
+**Initial relation analysis** — available after initial structure is approved. May be triggered from Root Planning or the World Map. Primarily analyzes relations between direct Root children. Uses Root Planning conversation content, World description, and node titles, descriptions, and goals. Proposes only high-level relations supported by clear evidence. Does not require completed non-root Planning conversations.
+
+**Deep relation analysis** — available once Topic Planning conversations contain meaningful content. Uses that deeper evidence to propose more precise additions, changes, or archival. Remains explicitly user-triggered. Does not run after every message.
 
 Relations should be archived rather than silently hard-deleted when no longer valid.
 

@@ -109,9 +109,15 @@ Ordered stages. Do not skip ahead.
 
 **Approved writable relation types:** `dependency`, `reference` (both directed).
 
-**`dependency`:** source depends on target; target provides a required prerequisite, decision, deliverable, or progress needed by source; may eventually influence blockers and readiness; does not imply ownership or parenthood.
+**Scope includes:** hardened relation persistence; manual create/edit/archive; relation panel; existing World Map relation rendering fed by real data; relation context injection into non-root Planning; **dependency visibility, navigation, bounded context, and provisional-work awareness**.
 
-**`reference`:** source should receive relevant context from target; source is not blocked by target; does not imply ownership, hierarchy, or sequencing.
+**Root children may have secondary relations.** Being a direct child of the Root does not imply workstream independence. Relations between Root children are expected.
+
+**`dependency`:** source depends on target (directed). The source requires a decision, deliverable, constraint, or progress from the target in order to complete, validate, or finalize a material part of its work. A dependency does **not** necessarily mean no work may begin on the source — early exploration and provisional planning may proceed. Does not imply ownership or parenthood. Hard blocking belongs only to future Execution, not Topic Planning.
+
+**`dependency` relation note must explain:** what may proceed immediately; what remains provisional or blocked; what exact output is required from the target.
+
+**`reference`:** source should receive relevant context from target (directed); source is not blocked by target; does not imply ownership, hierarchy, or sequencing.
 
 **Legacy enum values** (`shared-feature`, `shared-contract`) remain in PostgreSQL but are **not approved for new product writes**. Do not propose an enum-removal migration.
 
@@ -129,7 +135,7 @@ Ordered stages. Do not skip ahead.
 
 - Relations should be archived rather than silently hard-deleted.
 - Stage F migration (minimal): likely fields `note`, `updated_at`, `archived_at`, plus partial unique indexes preventing duplicate live relations.
-- Every manually created relation requires a short explanatory note.
+- Every manually created relation requires a short explanatory note. For `dependency`, the note must cover what may proceed, what remains provisional or blocked, and what output the target must provide.
 
 **Legacy relation filters (Stage F):**
 
@@ -152,34 +158,59 @@ Ordered stages. Do not skip ahead.
 - Exact numerical caps are tunable defaults, not permanent architectural constants.
 - Pending, rejected, or archived relations never affect context.
 
-**Stage F includes:** hardened relation persistence; manual create/edit/archive; relation panel; existing World Map relation rendering fed by real data; relation context injection into non-root Planning.
+**Stage F includes:** hardened relation persistence; manual create/edit/archive; relation panel; existing World Map relation rendering fed by real data; relation context injection into non-root Planning; dependency visibility, navigation, bounded context, and provisional-work awareness in Topic Planning.
 
-**Stage F excludes:** AI relation proposals; automatic staleness analysis; recursive graph traversal; Structure Reconciliation; shared contract entities; automatic downstream mutation.
+**Stage F excludes:** AI relation proposals; automatic staleness analysis; recursive graph traversal; Structure Reconciliation; shared contract entities; automatic downstream mutation; hard blocking of Planning conversations.
 
 ### Stage G — AI Relation Proposals
 
-- AI relation detection runs only after explicit user action.
+Two explicit analysis modes (both user-triggered; neither runs automatically during structure approval):
+
+**Initial relation analysis:**
+
+- Available after the initial structure is approved.
+- May be triggered explicitly from Root Planning or the World Map.
+- Primarily analyzes relations between direct Root children.
+- Uses Root Planning conversation content, World description, and node titles, descriptions, and goals.
+- Proposes only high-level relations supported by clear evidence.
+- Does not require completed non-root Planning conversations.
+
+**Deep relation analysis:**
+
+- Available once Topic Planning conversations contain meaningful content.
+- Uses that deeper evidence to propose more precise additions, changes, or archival.
+- Remains explicitly user-triggered.
 - Does not run after every message.
-- Does not run automatically immediately after initial structure approval.
-- Requires real Planning content.
+
+**Shared rules:**
+
+- Proposals remain separate from active `node_relations`; AI never creates active relations without user approval.
 - Every proposal must contain evidence grounded in node goals, descriptions, or Planning content.
 - Hallucinated node IDs, cross-World targets, self-links, and duplicates are rejected.
-- Proposals remain separate from active World state.
-- User may approve, edit, or reject.
-- Approval applies validated relations atomically.
+- User may approve, edit, or reject; approval applies validated relations atomically.
 - No numeric LLM confidence score.
 - Rejected proposals should not immediately recur without materially new evidence.
 - Likely schema additions (Stage G, not Stage F): `origin` (at least `manual` and `ai_approved`) and `created_by_suggestion_id` for audit trail — introduced with the proposal artifact and approval behaviour, not before.
 
-### Stage H — Impact Review
+### Stage H — Impact Review and Dependency Updates
 
-- Meaningful node changes may make directly connected relations questionable.
-- Examples: goal change, material description change, move, archive, later split or merge, reversal of a decision used as evidence.
-- Position changes, progress changes, or ordinary chat messages are **not** meaningful structural changes.
-- Impact analysis is bounded to directly connected relations.
-- Depth 1 is a durable architectural invariant; no recursive graph-wide propagation.
-- Changes create awareness and review work rather than automatic cascading mutations.
-- User confirms, edits, replaces, or archives the affected relation.
+**Meaningful changes** (committed, not ordinary chat) may make directly connected relations questionable or require downstream review. Examples: goal changes, material description changes, approved decisions, approved deliverables, move, archive, later split or merge, reversal of a decision used as evidence.
+
+**Not meaningful:** position changes, progress changes, ordinary chat messages (draft conversation content does not automatically trigger downstream impact).
+
+**Dynamic-change principles:**
+
+- A target change must not silently rewrite dependent conversations, tasks, decisions, or plans.
+- It should create a durable Dependency Update / Impact Review item.
+- The dependent Node receives a Needs Review indicator.
+- The next AI request may receive the latest approved target context, clearly labelled as changed or possibly stale.
+- AI may propose affected changes, but the user must approve before existing work is modified.
+- Historical chat messages are never rewritten retroactively.
+- Automatic update events must be visually distinct from user and assistant messages.
+
+**Planned notification surfaces:** World Map badge or Needs Review indicator; persistent banner in the dependent Planning chat; chronological dependency-update event; relation details showing the source of the change; direct navigation to the changed target Node.
+
+**Bounded scope:** impact analysis is depth 1 only (durable invariant); no recursive graph-wide propagation. User confirms, edits, replaces, or archives affected relations.
 
 ### Stage I — Structure Reconciliation
 
@@ -316,6 +347,19 @@ Dedicated Root Planning Chat at `/worlds/[worldId]/nodes/[nodeId]`; streaming vi
 ### Stage E
 
 - Exact Stage E route and resolver shape (to be finalized in the Stage E plan).
+
+### Stage G (require approval before implementation)
+
+- How “enough context” is determined for deep relation analysis eligibility.
+- Whether initial and deep analysis share one proposal artifact or separate flows.
+
+### Stage H (require approval before implementation)
+
+- Dependency satisfaction states and transitions.
+- Whether satisfaction is user-set, artifact-driven, or AI-proposed and reviewed.
+- Exact storage model for dependency-update events.
+- Whether stale relations continue contributing context.
+- Future Execution actions that may be hard-blocked.
 
 ### Stage F (require approval before implementation)
 
