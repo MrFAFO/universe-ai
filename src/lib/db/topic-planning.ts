@@ -23,6 +23,15 @@ export class TopicPlanningNotFoundError extends Error {
   }
 }
 
+export class TopicPlanningProvisioningIntegrityError extends DatabaseError {
+  constructor(
+    message = "Topic planning conversation provisioning integrity check failed.",
+  ) {
+    super(message);
+    this.name = "TopicPlanningProvisioningIntegrityError";
+  }
+}
+
 export type DbTopicNode = Readonly<
   DbNode & {
     kind: "topic";
@@ -123,4 +132,81 @@ export async function resolveTopicPlanningConversation(
     node: (node as DbNode | null) ?? null,
     conversation: (conversation as DbConversation | null) ?? null,
   });
+}
+
+const TOPIC_PLANNING_CONVERSATION_TITLE = "Planning";
+
+function assertProvisionedConversation(
+  row: DbConversation,
+  target: VerifiedTopicPlanningTarget,
+): DbPlanningConversation {
+  if (
+    row.node_id !== target.node.id ||
+    row.world_id !== target.node.world_id ||
+    row.kind !== "planning"
+  ) {
+    throw new TopicPlanningProvisioningIntegrityError();
+  }
+
+  return row as DbPlanningConversation;
+}
+
+async function selectTopicPlanningConversation(
+  nodeId: string,
+): Promise<DbConversation | null> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("*")
+    .eq("node_id", nodeId)
+    .eq("kind", "planning")
+    .maybeSingle();
+
+  if (error) {
+    throw new DatabaseError(error.message);
+  }
+
+  return (data as DbConversation | null) ?? null;
+}
+
+export async function ensureTopicPlanningConversation(
+  target: VerifiedTopicPlanningTarget,
+): Promise<DbPlanningConversation> {
+  if (target.conversation) {
+    return target.conversation;
+  }
+
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("conversations")
+    .insert({
+      world_id: target.node.world_id,
+      node_id: target.node.id,
+      kind: "planning",
+      title: TOPIC_PLANNING_CONVERSATION_TITLE,
+    })
+    .select("*")
+    .single();
+
+  if (!error && data) {
+    return assertProvisionedConversation(data as DbConversation, target);
+  }
+
+  if (error?.code === "23505") {
+    const existing = await selectTopicPlanningConversation(target.node.id);
+
+    if (!existing) {
+      throw new DatabaseError(
+        "Unable to provision topic planning conversation.",
+      );
+    }
+
+    return assertProvisionedConversation(existing, target);
+  }
+
+  if (error) {
+    throw new DatabaseError(error.message);
+  }
+
+  throw new DatabaseError("Unable to provision topic planning conversation.");
 }
