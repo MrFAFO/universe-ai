@@ -3,6 +3,7 @@ import type {
   DbNode,
   DbWorld,
 } from "@/types/db";
+import type { WorldNodeForAncestorPath } from "@/lib/ai/ancestor-context";
 import { DatabaseError } from "./errors";
 import { createSupabaseServerClient } from "./client";
 
@@ -209,4 +210,20 @@ export async function ensureTopicPlanningConversation(
   }
 
   throw new DatabaseError("Unable to provision topic planning conversation.");
+}
+
+export async function listWorldNodesForAncestorContext(
+  worldId: string,
+): Promise<WorldNodeForAncestorPath[]> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("nodes")
+    .select("id, parent_id, kind, title, description, goal")
+    .eq("world_id", worldId);
+
+  if (error) {
+    throw new DatabaseError(error.message);
+  }
+
+  return (data ?? []) as WorldNodeForAncestorPath[];
 }

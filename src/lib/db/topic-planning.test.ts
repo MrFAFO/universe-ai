@@ -8,6 +8,7 @@ import { DatabaseError } from "@/lib/db/errors";
 import {
   TopicPlanningNotFoundError,
   type TopicPlanningNotFoundReason,
+  listWorldNodesForAncestorContext,
   resolveTopicPlanningConversation,
   verifyTopicPlanningTarget,
 } from "@/lib/db/topic-planning";
@@ -417,5 +418,97 @@ describe("resolveTopicPlanningConversation", () => {
     });
 
     await expectResolveDatabaseError(/conversation query failed/);
+  });
+});
+
+describe("listWorldNodesForAncestorContext", () => {
+  function createListQueryBuilder(result: QueryResult) {
+    const builder: Record<string, unknown> = {};
+    const chain = () => builder;
+
+    builder.select = vi.fn(chain);
+    builder.eq = vi.fn(chain);
+    builder.then = (
+      onFulfilled: (value: QueryResult) => unknown,
+      onRejected?: (reason: unknown) => unknown,
+    ) => Promise.resolve(result).then(onFulfilled, onRejected);
+
+    return builder;
+  }
+
+  beforeEach(() => {
+    mockFrom.mockReset();
+  });
+
+  it("returns world-scoped ancestor-path fields for all nodes", async () => {
+    const builder = createListQueryBuilder({
+      data: [
+        {
+          id: parentNodeId,
+          parent_id: null,
+          kind: "root",
+          title: "Root",
+          description: "",
+          goal: "Root goal",
+        },
+        {
+          id: nodeId,
+          parent_id: parentNodeId,
+          kind: "topic",
+          title: "Topic",
+          description: "Topic description",
+          goal: "Topic goal",
+        },
+      ],
+      error: null,
+    });
+    mockFrom.mockReturnValue(builder);
+
+    await expect(listWorldNodesForAncestorContext(worldId)).resolves.toEqual([
+      {
+        id: parentNodeId,
+        parent_id: null,
+        kind: "root",
+        title: "Root",
+        description: "",
+        goal: "Root goal",
+      },
+      {
+        id: nodeId,
+        parent_id: parentNodeId,
+        kind: "topic",
+        title: "Topic",
+        description: "Topic description",
+        goal: "Topic goal",
+      },
+    ]);
+
+    expect(mockFrom).toHaveBeenCalledWith("nodes");
+    expect(builder.select).toHaveBeenCalledWith(
+      "id, parent_id, kind, title, description, goal",
+    );
+    expect(builder.eq).toHaveBeenCalledWith("world_id", worldId);
+  });
+
+  it("throws DatabaseError when the query fails", async () => {
+    mockFrom.mockReturnValue(
+      createListQueryBuilder({
+        data: null,
+        error: { message: "nodes query failed" },
+      }),
+    );
+
+    let thrown: unknown;
+
+    try {
+      await listWorldNodesForAncestorContext(worldId);
+      expect.unreachable("Expected DatabaseError to be thrown");
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(DatabaseError);
+    expect((thrown as DatabaseError).message).toContain("nodes query failed");
+    expect(mockFrom).toHaveBeenCalledTimes(1);
   });
 });
