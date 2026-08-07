@@ -13,11 +13,12 @@ A new developer or AI conversation should start here without relying on prior ch
    - `git status -sb`
    - `git branch --show-current`
    - `git log --oneline --decorate --max-count=5`
-3. **Confirm** you are on `stage-e-non-root-planning` (or a descendant branch created for Stage E work).
-4. **Do not start relation implementation.** Relations are Stage F and later.
-5. **Next work is Stage E — Non-root Planning.** Define the final Stage E implementation plan, then implement it.
+3. **Confirm** you are on `stage-e-non-root-planning` (or a descendant branch created for Stage E.1 work).
+4. **Do not start relation implementation.** Relations are Stage F and later. **Stage F must not begin before Stage E.1 is completed.**
+5. **Next work is Stage E.1 — Planning Chat Concurrency Hardening.** Stage E — Non-root Planning is complete and manually accepted on this branch.
 6. **Preserve all Stage D invariants** (see `docs/ARCHITECTURE.md` — Stage D boundary). Root Planning behaviour must not regress.
-7. **Request explicit product approval** before expanding Stage E scope beyond what is documented here and in `docs/ARCHITECTURE.md`.
+7. **Approved sequence:** Stage E → Stage E.1 Planning Chat Concurrency Hardening → Stage F.
+8. **Stage E.1 must be planned and reviewed before implementation.** Request explicit product approval before expanding Stage E.1 beyond the already approved concurrency-hardening boundary.
 
 ---
 
@@ -25,71 +26,65 @@ A new developer or AI conversation should start here without relying on prior ch
 
 | Item | Value |
 |---|---|
-| **Completed stage** | Stage D — Branch Suggestions and initial structure creation |
+| **Completed stage** | Stage E — Non-root Planning |
 | **Acceptance** | Manually accepted |
-| **Merged into `main`** | Yes — fast-forwarded |
-| **Accepted commit** | `95e09f6` — *docs: record stage d acceptance* |
+| **Merged into `main`** | No — implementation on working branch |
 | **`main` / `origin/main`** | Both at `95e09f6` (verified) |
+| **Implementation commits** | `609919b` target resolver · `2546253` conversation provisioning · `c7530b0` context and prompt · `3595c14` shared stream and topic orchestration · `020340e` UI and routing |
+| **Prior completed stage** | Stage D — Branch Suggestions and initial structure creation (`95e09f6`, merged to `main`) |
 | **Current working branch** | `stage-e-non-root-planning` |
-| **Immediate next stage** | Stage E — Non-root Planning (**not yet implemented**) |
+| **Immediate next stage** | Stage E.1 — Planning Chat Concurrency Hardening (**not yet implemented**) |
 
 ---
 
 ## Immediate Next Task
 
-1. Define the final Stage E implementation plan (resolver boundaries, route shape, ancestor-context builder, acceptance criteria).
-2. Implement Non-root Planning for Topic Nodes.
-3. **No relation code yet.** Do not add `node_relations` writes, relation UI, or relation context injection during Stage E.
+1. Define or review the **Stage E.1 — Planning Chat Concurrency Hardening** plan and acceptance criteria.
+2. Implement Stage E.1 only after that plan is reviewed and approved.
+3. **Do not start Stage F** until Stage E.1 is complete.
+4. **No relation code yet.** Do not add `node_relations` writes, relation UI, or relation context injection during Stage E.1.
+
+### Stage E.1 planning obligations (not designed here)
+
+- Stage E.1 must explicitly re-evaluate run-acquisition timing rather than assume acquisition simply replaces `createAiRun`.
+- Planning must consider whether acquisition should happen before user-message persistence so that a rejected concurrent send does not leave an unanswered persisted user message.
 
 ---
 
-## Stage E — Non-root Planning (approved, not implemented)
+## Stage E — Non-root Planning (completed)
 
-### Purpose
+Stage E made every Topic Node a persistent Planning workspace while keeping Root Planning unchanged and excluding all relation behaviour.
 
-- Make every Topic Node a real planning workspace.
-- Allow the user to hold a persistent Planning conversation inside any non-root node.
-- Establish real Planning content from which later cross-node relations and reconciliation can be inferred.
+**Delivered capabilities:**
 
-### Expected scope
+- Persistent Planning chat for every Topic Node (`/worlds/[worldId]/nodes/[nodeId]` dispatches by node kind).
+- Dedicated Topic resolver distinct from Root (`verifyTopicPlanningTarget`, `resolveTopicPlanningConversation`).
+- Lazy first-send conversation provisioning (`ensureTopicPlanningConversation`); page render stays read-only.
+- Ancestor-path context in Topic model input (`resolveAncestorContext`, `buildTopicPlanningBrief`).
+- Fail-closed corrupted hierarchy handling (`AncestorChainError` → blocked Planning state with safe message).
+- Topic Planning UI and routing (`TopicPlanningChat`, kind dispatch in messages route and page).
+- Active “Open Planning Chat” link for every node in the World Map details panel.
+- Shared NDJSON planning stream core reused by Root and Topic orchestrators.
+- Root Planning behaviour unchanged; Branch Suggestion surface remains Root-only.
 
-- One Planning conversation per Topic Node.
-- Reuse existing Root Planning streaming and persistence infrastructure where safe.
-- Add a dedicated non-root resolver rather than weakening Root Planning invariants.
-- Include compact ancestor-path context in model input.
-- Preserve chronological message ordering and persisted history.
-- Allow reopening and refreshing without losing messages.
-- Keep Root Planning behaviour unchanged.
-
-### Explicitly excluded from Stage E
+**Explicitly excluded from Stage E (not delivered):**
 
 - Execution conversations
-- Automatic relation detection
-- Manual relation editing
-- Structure Reconciliation
-- Update Existing Structure
-- Relation impact propagation
-- Full Context Engine
-- Authentication
-- New dependency additions unless technically unavoidable and explicitly approved
+- Automatic relation detection, manual relation editing, or relation context injection
+- Structure Reconciliation, Update Existing Structure, relation impact propagation
+- Full Context Engine, authentication
+- Planning chat concurrency hardening (Stage E.1)
+- New dependencies or migrations
 
-### Likely automated acceptance criteria
+### Accepted concurrency limitation (addressed by Stage E.1, not Stage E)
 
-- Cross-World node/conversation mismatches are rejected.
-- Root Planning and non-root Planning resolvers remain distinct.
-- Only Topic Nodes use the non-root Planning flow.
-- One Planning conversation per node.
-- Message persistence and ordinal ordering.
-- Deterministic ancestor-path context.
-- Root Planning regression coverage.
-
-### Likely manual acceptance criteria
-
-- Opening a Topic Node Planning chat.
-- Sending and receiving messages.
-- Refreshing and reopening without losing history.
-- Ancestor context influencing the response appropriately.
-- Root Planning continuing to behave exactly as before.
+- Two separate tabs or clients can still send simultaneously to the same Planning conversation.
+- Both completed replies persist.
+- Partial assistant output is not persisted.
+- Replies are coherent and not text-interleaved.
+- After refresh, all tabs converge to the same persisted message order.
+- Assistant completion order may differ from request-start order.
+- Stage E.1 Planning Chat Concurrency Hardening is the approved task that resolves this limitation.
 
 ---
 
@@ -99,8 +94,9 @@ Ordered stages. Do not skip ahead.
 
 | Stage | Name | Status |
 |---|---|---|
-| **E** | Non-root Planning | **Next — not implemented** |
-| **F** | Secondary Relations MVP | Approved, not implemented |
+| **E** | Non-root Planning | **Complete — manually accepted** |
+| **E.1** | Planning Chat Concurrency Hardening | **Next — not implemented** |
+| **F** | Secondary Relations MVP | Approved, not implemented (do not start before E.1) |
 | **G** | AI Relation Proposals | Approved, not implemented |
 | **H** | Impact Review | Approved, not implemented |
 | **I** | Structure Reconciliation | Approved, not implemented |
@@ -267,9 +263,26 @@ Stage D delivered structured initial World structure proposals through Root Plan
 - Generate hiding after approval
 - Duplicate-Approve protection
 
+### Stage E completion (accepted on `stage-e-non-root-planning`)
+
+**Automated:**
+
+- 419 tests passed across 32 test files
+- Lint passed with 0 errors; 1 pre-existing `@next/next/no-img-element` warning in `src/components/universe/UniverseHero.tsx`
+- Production build passed
+- `git diff --check e5b1391..HEAD`: clean
+- Final Stage E scope review: no new dependencies, migrations, relation implementation, Execution implementation, reconciliation implementation, or Stage E.1 run-acquisition code
+
+**Manual acceptance passed (scenarios 1–14):**
+
+- Topic Node Planning chat open, send, receive, refresh, and reopen without losing history
+- Ancestor context influencing responses appropriately
+- Root Planning continuing to behave exactly as before
+- Concurrent sends from two tabs on the same Topic conversation (documents the accepted limitation above)
+
 ### Known lint warning
 
-- Pre-existing `UniverseHero` `<img>` warning — not introduced by Stage D; not a blocker.
+- Pre-existing `UniverseHero` `<img>` warning — not introduced by Stage D or Stage E; not a blocker.
 
 ---
 
@@ -314,11 +327,15 @@ Persistent world queries, Create World flow, Universe Home and World Map load fr
 
 Dedicated Root Planning Chat at `/worlds/[worldId]/nodes/[nodeId]`; streaming via OpenAI Responses API; NDJSON protocol; message and `ai_runs` persistence.
 
+### Stage E — Non-root Planning
+
+Topic Node Planning chat on the same route with kind dispatch; dedicated Topic resolver and lazy conversation provisioning; ancestor-path context; `TopicPlanningChat` UI; Root Planning and Branch Suggestions unchanged; no relation behaviour.
+
 ### Application routes (current)
 
 - `/` — Universe Home
 - `/worlds/[worldId]` — World Map
-- `/worlds/[worldId]/nodes/[nodeId]` — Root Planning Chat (Root node only today; Topic Node Planning is Stage E)
+- `/worlds/[worldId]/nodes/[nodeId]` — Planning Chat (Root or Topic; dispatched by node kind)
 
 ### World Map (current)
 
@@ -330,7 +347,7 @@ Dedicated Root Planning Chat at `/worlds/[worldId]/nodes/[nodeId]`; streaming vi
 
 ## Not Yet Implemented
 
-- Non-root Planning conversations (Stage E)
+- Planning Chat concurrency hardening (Stage E.1)
 - Relation create/edit/archive (Stage F)
 - AI relation proposals (Stage G)
 - Relation impact review (Stage H)
@@ -343,10 +360,6 @@ Dedicated Root Planning Chat at `/worlds/[worldId]/nodes/[nodeId]`; streaming vi
 ---
 
 ## Open Product Decisions
-
-### Stage E
-
-- Exact Stage E route and resolver shape (to be finalized in the Stage E plan).
 
 ### Stage G (require approval before implementation)
 
