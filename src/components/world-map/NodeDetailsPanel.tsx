@@ -173,20 +173,13 @@ export function NodeDetailsPanel({
         </Section>
       </div>
 
-      {node.data.kind === "root" ? (
-        <Link
-          href={`/worlds/${worldId}/nodes/${node.id}`}
-          className="node-details__open node-details__open--active"
-        >
-          Open Planning Chat
-          <ArrowUpRight className="size-4" strokeWidth={1.75} />
-        </Link>
-      ) : (
-        <button type="button" className="node-details__open" disabled>
-          Open Node
-          <ArrowUpRight className="size-4" strokeWidth={1.75} />
-        </button>
-      )}
+      <Link
+        href={`/worlds/${worldId}/nodes/${node.id}`}
+        className="node-details__open node-details__open--active"
+      >
+        Open Planning Chat
+        <ArrowUpRight className="size-4" strokeWidth={1.75} />
+      </Link>
     </aside>
   );
 }

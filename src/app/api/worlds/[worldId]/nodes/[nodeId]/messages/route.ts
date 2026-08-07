@@ -5,11 +5,17 @@ import {
   PUBLIC_CHAT_ERROR_MESSAGE,
 } from "@/lib/db/errors";
 import {
+  PlanningNodeTargetNotFoundError,
+  loadPlanningNodeKind,
+} from "@/lib/db/planning-node-target";
+import { TopicPlanningNotFoundError } from "@/lib/db/topic-planning";
+import {
   nodeIdParamSchema,
   sendMessageInputSchema,
   worldIdParamSchema,
 } from "@/lib/validation/schemas";
 import { createRootPlanningChatStream } from "@/server/chat/root-planning-chat";
+import { createTopicPlanningChatStream } from "@/server/chat/topic-planning-chat";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,12 +55,25 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   try {
-    const stream = await createRootPlanningChatStream({
-      worldId: parsedWorldId.data,
-      nodeId: parsedNodeId.data,
-      content: parsedBody.data.content,
-      signal: request.signal,
-    });
+    const kind = await loadPlanningNodeKind(
+      parsedWorldId.data,
+      parsedNodeId.data,
+    );
+
+    const stream =
+      kind === "root"
+        ? await createRootPlanningChatStream({
+            worldId: parsedWorldId.data,
+            nodeId: parsedNodeId.data,
+            content: parsedBody.data.content,
+            signal: request.signal,
+          })
+        : await createTopicPlanningChatStream({
+            worldId: parsedWorldId.data,
+            nodeId: parsedNodeId.data,
+            content: parsedBody.data.content,
+            signal: request.signal,
+          });
 
     return new Response(stream, {
       headers: {
@@ -63,9 +82,13 @@ export async function POST(request: Request, context: RouteContext) {
       },
     });
   } catch (error) {
-    if (error instanceof RootPlanningNotFoundError) {
+    if (
+      error instanceof RootPlanningNotFoundError ||
+      error instanceof TopicPlanningNotFoundError ||
+      error instanceof PlanningNodeTargetNotFoundError
+    ) {
       return NextResponse.json(
-        { error: "Root planning conversation not found." },
+        { error: "Planning conversation not found." },
         { status: 404 },
       );
     }
