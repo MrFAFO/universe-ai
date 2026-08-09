@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BranchSuggestionV1 } from "@/lib/ai/branch-suggestion";
-import { replacePendingBranchSuggestion, beginBranchSuggestionAiRun, approveBranchSuggestion, rejectBranchSuggestion } from "@/lib/db/rpc";
+import { replacePendingBranchSuggestion, beginBranchSuggestionAiRun, beginPlanningChatAiRun, completePlanningChatRun, approveBranchSuggestion, rejectBranchSuggestion } from "@/lib/db/rpc";
 import { DatabaseError } from "@/lib/db/errors";
 import type { DbBranchSuggestion } from "@/types/db";
 
@@ -9,6 +9,7 @@ const aiRunId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const worldId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const parentNodeId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const suggestionId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const messageId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 
 const validPayload: BranchSuggestionV1 = {
   schemaVersion: 1,
@@ -216,6 +217,215 @@ describe("beginBranchSuggestionAiRun RPC wrapper", () => {
         conversationId,
         model: "gpt-test",
         schemaVersion: 1,
+      }),
+    ).rejects.toThrow(DatabaseError);
+  });
+});
+
+describe("beginPlanningChatAiRun RPC wrapper", () => {
+  beforeEach(() => {
+    mockRpc.mockReset();
+  });
+
+  it("maps arguments to the Supabase RPC parameter names", async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        id: aiRunId,
+        conversation_id: conversationId,
+        model: "gpt-test",
+        status: "running",
+        metadata: { purpose: "planning_chat" },
+      },
+      error: null,
+    });
+
+    const result = await beginPlanningChatAiRun({
+      conversationId,
+      model: "gpt-test",
+    });
+
+    expect(mockRpc).toHaveBeenCalledWith("begin_planning_chat_ai_run", {
+      p_conversation_id: conversationId,
+      p_model: "gpt-test",
+    });
+    expect(result).toEqual({ id: aiRunId });
+  });
+
+  it("parses a valid id from the RPC JSONB row", async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        id: aiRunId,
+        conversation_id: conversationId,
+        model: "gpt-test",
+        status: "running",
+        metadata: { purpose: "planning_chat" },
+        created_at: "2026-01-01T00:00:00.000Z",
+      },
+      error: null,
+    });
+
+    const result = await beginPlanningChatAiRun({
+      conversationId,
+      model: "gpt-test",
+    });
+
+    expect(result.id).toBe(aiRunId);
+  });
+
+  it("rejects a non-UUID id in the RPC result", async () => {
+    mockRpc.mockResolvedValue({
+      data: { id: "not-a-uuid" },
+      error: null,
+    });
+
+    await expect(
+      beginPlanningChatAiRun({
+        conversationId,
+        model: "gpt-test",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("rethrows Supabase RPC errors for upstream classification", async () => {
+    const rpcError = {
+      message: "planning_run_in_progress",
+      code: "P0001",
+    };
+    mockRpc.mockResolvedValue({ data: null, error: rpcError });
+
+    await expect(
+      beginPlanningChatAiRun({
+        conversationId,
+        model: "gpt-test",
+      }),
+    ).rejects.toEqual(rpcError);
+  });
+
+  it("throws DatabaseError when RPC returns no data", async () => {
+    mockRpc.mockResolvedValue({ data: null, error: null });
+
+    await expect(
+      beginPlanningChatAiRun({
+        conversationId,
+        model: "gpt-test",
+      }),
+    ).rejects.toThrow(DatabaseError);
+  });
+});
+
+describe("completePlanningChatRun RPC wrapper", () => {
+  beforeEach(() => {
+    mockRpc.mockReset();
+  });
+
+  it("maps arguments to the Supabase RPC parameter names", async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        id: messageId,
+        conversation_id: conversationId,
+        role: "assistant",
+        content: "Assistant reply",
+        ai_run_id: aiRunId,
+        ordinal: 1,
+        created_at: "2026-01-01T00:00:00.000Z",
+      },
+      error: null,
+    });
+
+    const result = await completePlanningChatRun({
+      aiRunId,
+      conversationId,
+      content: "Assistant reply",
+      openaiResponseId: "resp-123",
+      inputTokens: 10,
+      outputTokens: 20,
+    });
+
+    expect(mockRpc).toHaveBeenCalledWith("complete_planning_chat_ai_run", {
+      p_ai_run_id: aiRunId,
+      p_conversation_id: conversationId,
+      p_content: "Assistant reply",
+      p_openai_response_id: "resp-123",
+      p_input_tokens: 10,
+      p_output_tokens: 20,
+    });
+    expect(result).toEqual({ messageId });
+  });
+
+  it("parses a valid message id from the RPC JSONB row", async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        id: messageId,
+        conversation_id: conversationId,
+        role: "assistant",
+        content: "Assistant reply",
+        ai_run_id: aiRunId,
+        ordinal: 2,
+        created_at: "2026-01-01T00:00:01.000Z",
+      },
+      error: null,
+    });
+
+    const result = await completePlanningChatRun({
+      aiRunId,
+      conversationId,
+      content: "Assistant reply",
+      openaiResponseId: null,
+      inputTokens: null,
+      outputTokens: null,
+    });
+
+    expect(result.messageId).toBe(messageId);
+  });
+
+  it("rejects a non-UUID message id in the RPC result", async () => {
+    mockRpc.mockResolvedValue({
+      data: { id: "not-a-uuid" },
+      error: null,
+    });
+
+    await expect(
+      completePlanningChatRun({
+        aiRunId,
+        conversationId,
+        content: "Assistant reply",
+        openaiResponseId: null,
+        inputTokens: null,
+        outputTokens: null,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("rethrows Supabase RPC errors for upstream classification", async () => {
+    const rpcError = {
+      message: "planning_run_not_active",
+      code: "P0001",
+    };
+    mockRpc.mockResolvedValue({ data: null, error: rpcError });
+
+    await expect(
+      completePlanningChatRun({
+        aiRunId,
+        conversationId,
+        content: "Assistant reply",
+        openaiResponseId: null,
+        inputTokens: null,
+        outputTokens: null,
+      }),
+    ).rejects.toEqual(rpcError);
+  });
+
+  it("throws DatabaseError when RPC returns no data", async () => {
+    mockRpc.mockResolvedValue({ data: null, error: null });
+
+    await expect(
+      completePlanningChatRun({
+        aiRunId,
+        conversationId,
+        content: "Assistant reply",
+        openaiResponseId: null,
+        inputTokens: null,
+        outputTokens: null,
       }),
     ).rejects.toThrow(DatabaseError);
   });

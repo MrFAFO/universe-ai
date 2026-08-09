@@ -84,3 +84,11 @@ export const dbBranchSuggestionRowSchema = z.object({
 export const beginBranchSuggestionAiRunResultSchema = z.object({
   id: z.uuid(),
 });
+
+export const beginPlanningChatAiRunResultSchema = z.object({
+  id: z.uuid(),
+});
+
+export const completePlanningChatRunResultSchema = z.object({
+  id: z.uuid(),
+}).transform((row) => ({ messageId: row.id }));

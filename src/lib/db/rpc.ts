@@ -8,6 +8,8 @@ import type {
 import {
   approveBranchSuggestionResultSchema,
   beginBranchSuggestionAiRunResultSchema,
+  beginPlanningChatAiRunResultSchema,
+  completePlanningChatRunResultSchema,
   createWorldWithRootResultSchema,
   dbBranchSuggestionRowSchema,
   rejectBranchSuggestionResultSchema,
@@ -29,6 +31,20 @@ export interface BeginBranchSuggestionAiRunRpcInput {
   conversationId: string;
   model: string;
   schemaVersion: 1;
+}
+
+export interface BeginPlanningChatAiRunRpcInput {
+  conversationId: string;
+  model: string;
+}
+
+export interface CompletePlanningChatRunRpcInput {
+  aiRunId: string;
+  conversationId: string;
+  content: string;
+  openaiResponseId: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
 }
 
 export async function createWorldWithRoot(
@@ -118,4 +134,48 @@ export async function beginBranchSuggestionAiRun(
   }
 
   return beginBranchSuggestionAiRunResultSchema.parse(data);
+}
+
+export async function beginPlanningChatAiRun(
+  input: BeginPlanningChatAiRunRpcInput,
+): Promise<{ id: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("begin_planning_chat_ai_run", {
+    p_conversation_id: input.conversationId,
+    p_model: input.model,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw new DatabaseError("Unable to acquire planning chat ai_run.");
+  }
+
+  return beginPlanningChatAiRunResultSchema.parse(data);
+}
+
+export async function completePlanningChatRun(
+  input: CompletePlanningChatRunRpcInput,
+): Promise<{ messageId: string }> {
+  const supabase = createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("complete_planning_chat_ai_run", {
+    p_ai_run_id: input.aiRunId,
+    p_conversation_id: input.conversationId,
+    p_content: input.content,
+    p_openai_response_id: input.openaiResponseId,
+    p_input_tokens: input.inputTokens,
+    p_output_tokens: input.outputTokens,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw new DatabaseError("Unable to finalize planning chat ai_run.");
+  }
+
+  return completePlanningChatRunResultSchema.parse(data);
 }
