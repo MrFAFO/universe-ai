@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
+import {
+  PLANNING_CHAT_CONFLICT_CODE,
+  PLANNING_CHAT_CONFLICT_MESSAGES,
+} from "@/lib/chat/planning-chat-conflict";
 import { RootPlanningNotFoundError } from "@/lib/db/chat";
 import {
   DatabaseError,
   PUBLIC_CHAT_ERROR_MESSAGE,
 } from "@/lib/db/errors";
+import { PlanningRunInProgressError } from "@/lib/db/planning-chat-runs";
 import {
   PlanningNodeTargetNotFoundError,
   loadPlanningNodeKind,
@@ -90,6 +95,16 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json(
         { error: "Planning conversation not found." },
         { status: 404 },
+      );
+    }
+
+    if (error instanceof PlanningRunInProgressError) {
+      return NextResponse.json(
+        {
+          error: PLANNING_CHAT_CONFLICT_MESSAGES.planning_run_in_progress,
+          code: PLANNING_CHAT_CONFLICT_CODE,
+        },
+        { status: 409 },
       );
     }
 

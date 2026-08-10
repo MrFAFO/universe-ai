@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  PLANNING_CHAT_CONFLICT_CODE,
+  PLANNING_CHAT_CONFLICT_MESSAGES,
+} from "@/lib/chat/planning-chat-conflict";
 import { RootPlanningNotFoundError } from "@/lib/db/chat";
 import { DatabaseError, PUBLIC_CHAT_ERROR_MESSAGE } from "@/lib/db/errors";
 import { PlanningNodeTargetNotFoundError } from "@/lib/db/planning-node-target";
+import { PlanningRunInProgressError } from "@/lib/db/planning-chat-runs";
 import {
   TopicPlanningNotFoundError,
   TopicPlanningProvisioningIntegrityError,
@@ -158,6 +163,44 @@ describe("POST /api/worlds/[worldId]/nodes/[nodeId]/messages", () => {
 
     expect(response.status).toBe(404);
     expect(body).toEqual({ error: "Planning conversation not found." });
+  });
+
+  it("returns safe 409 for PlanningRunInProgressError on root nodes", async () => {
+    mocks.loadPlanningNodeKind.mockResolvedValue("root");
+    mocks.createRootPlanningChatStream.mockRejectedValue(
+      new PlanningRunInProgressError(),
+    );
+
+    const response = await POST(makeRequest(), makeRouteContext());
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toEqual({
+      error: PLANNING_CHAT_CONFLICT_MESSAGES.planning_run_in_progress,
+      code: PLANNING_CHAT_CONFLICT_CODE,
+    });
+    expect(JSON.stringify(body)).not.toContain("database unavailable");
+    expect(JSON.stringify(body)).not.toContain("PostgREST");
+    expect(body.error).not.toBe("planning_run_in_progress");
+  });
+
+  it("returns safe 409 for PlanningRunInProgressError on topic nodes", async () => {
+    mocks.loadPlanningNodeKind.mockResolvedValue("topic");
+    mocks.createTopicPlanningChatStream.mockRejectedValue(
+      new PlanningRunInProgressError(),
+    );
+
+    const response = await POST(makeRequest(), makeRouteContext());
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toEqual({
+      error: PLANNING_CHAT_CONFLICT_MESSAGES.planning_run_in_progress,
+      code: PLANNING_CHAT_CONFLICT_CODE,
+    });
+    expect(JSON.stringify(body)).not.toContain("database unavailable");
+    expect(JSON.stringify(body)).not.toContain("PostgREST");
+    expect(body.error).not.toBe("planning_run_in_progress");
   });
 
   it("returns safe 500 for TopicPlanningProvisioningIntegrityError", async () => {
