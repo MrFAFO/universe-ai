@@ -6,6 +6,10 @@ import { PUBLIC_CHAT_STREAM_ERROR_MESSAGE } from "@/lib/ai/stream-protocol";
 import { TopicBriefTooLargeError } from "@/lib/ai/topic-prompt";
 import { DatabaseError } from "@/lib/db/errors";
 import {
+  PlanningRunInProgressError,
+  PlanningRunOwnershipLostError,
+} from "@/lib/db/planning-chat-runs";
+import {
   createPlanningChatStream,
   type PlanningChatStreamDeps,
 } from "@/server/chat/planning-chat-stream";
@@ -13,6 +17,7 @@ import type { DbMessage } from "@/types/db";
 
 const conversationId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const aiRunId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const messageId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 
 function makeMessage(
   overrides: Partial<DbMessage> & Pick<DbMessage, "id" | "role" | "ordinal">,
@@ -75,13 +80,33 @@ function createMockDeps(
   overrides: Partial<PlanningChatStreamDeps> = {},
 ): PlanningChatStreamDeps & {
   calls: string[];
+  completedPlanningRuns: Array<{
+    content: string;
+    aiRunId: string;
+    conversationId: string;
+  }>;
 } {
   const calls: string[] = [];
+  const completedPlanningRuns: Array<{
+    content: string;
+    aiRunId: string;
+    conversationId: string;
+  }> = [];
 
   const deps: PlanningChatStreamDeps & {
     calls: string[];
+    completedPlanningRuns: Array<{
+      content: string;
+      aiRunId: string;
+      conversationId: string;
+    }>;
   } = {
     calls,
+    completedPlanningRuns,
+    beginPlanningChatAiRun: vi.fn(async () => {
+      calls.push("beginPlanningChatAiRun");
+      return { id: aiRunId };
+    }),
     insertUserMessage: vi.fn(async (_conversationId, content) => {
       calls.push("insertUser");
       return makeMessage({
@@ -91,21 +116,14 @@ function createMockDeps(
         content,
       });
     }),
-    insertAssistantMessage: vi.fn(async () => {
-      calls.push("insertAssistant");
-      return makeMessage({
-        id: "m-assistant",
-        role: "assistant",
-        ordinal: 2,
-        content: "Hello",
+    completePlanningChatRun: vi.fn(async (input) => {
+      calls.push("completePlanningChatRun");
+      completedPlanningRuns.push({
+        content: input.content,
+        aiRunId: input.aiRunId,
+        conversationId: input.conversationId,
       });
-    }),
-    createAiRun: vi.fn(async () => {
-      calls.push("createAiRun");
-      return { id: aiRunId };
-    }),
-    completeAiRun: vi.fn(async () => {
-      calls.push("completeAiRun");
+      return { messageId };
     }),
     failAiRun: vi.fn(async () => {
       calls.push("failAiRun");
@@ -150,9 +168,13 @@ function createRequest(
 }
 
 describe("createPlanningChatStream", () => {
-  it("follows the exact shared preparation order through createResponseStream", async () => {
+  it("acquires the planning run before user-message persistence and OpenAI", async () => {
     const order: string[] = [];
     const deps = createMockDeps({
+      beginPlanningChatAiRun: vi.fn(async () => {
+        order.push("beginPlanningChatAiRun");
+        return { id: aiRunId };
+      }),
       insertUserMessage: vi.fn(async () => {
         order.push("insertUser");
         return makeMessage({
@@ -165,10 +187,6 @@ describe("createPlanningChatStream", () => {
       getModel: vi.fn(() => {
         order.push("getModel");
         return "gpt-test";
-      }),
-      createAiRun: vi.fn(async () => {
-        order.push("createAiRun");
-        return { id: aiRunId };
       }),
       createResponseStream: vi.fn(async () => {
         order.push("createResponseStream");
@@ -185,6 +203,10 @@ describe("createPlanningChatStream", () => {
           yield makeCompletedEvent("Hello");
         })();
       }),
+      completePlanningChatRun: vi.fn(async () => {
+        order.push("completePlanningChatRun");
+        return { messageId };
+      }),
     });
     const prepareInputAfterUserInsert = vi.fn(async () => {
       order.push("prepareInput");
@@ -197,14 +219,38 @@ describe("createPlanningChatStream", () => {
     );
     await readNdjsonStream(stream);
 
-    expect(order.slice(0, 5)).toEqual([
+    expect(order).toEqual([
+      "getModel",
+      "beginPlanningChatAiRun",
       "insertUser",
       "prepareInput",
-      "getModel",
-      "createAiRun",
       "createResponseStream",
+      "completePlanningChatRun",
     ]);
     expect(prepareInputAfterUserInsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("propagates acquisition conflict without persisting the user message or starting OpenAI", async () => {
+    const deps = createMockDeps({
+      beginPlanningChatAiRun: vi.fn(async () => {
+        throw new PlanningRunInProgressError();
+      }),
+    });
+    const prepareInputAfterUserInsert = vi.fn(async () => {
+      return [{ role: "user", content: "Hello" }];
+    });
+
+    await expect(
+      createPlanningChatStream(
+        createRequest(prepareInputAfterUserInsert),
+        deps,
+      ),
+    ).rejects.toThrow(PlanningRunInProgressError);
+
+    expect(deps.insertUserMessage).not.toHaveBeenCalled();
+    expect(prepareInputAfterUserInsert).not.toHaveBeenCalled();
+    expect(deps.createResponseStream).not.toHaveBeenCalled();
+    expect(deps.failAiRun).not.toHaveBeenCalled();
   });
 
   it("invokes prepareInputAfterUserInsert exactly once", async () => {
@@ -235,6 +281,56 @@ describe("createPlanningChatStream", () => {
     expect(deps.insertUserMessage).toHaveBeenCalledWith(conversationId, "Hello");
   });
 
+  it("finalizes through the fenced completion wrapper on success", async () => {
+    const deps = createMockDeps();
+    const stream = await createPlanningChatStream(
+      createRequest(async () => [{ role: "user", content: "Hello" }]),
+      deps,
+    );
+    const events = await readNdjsonStream(stream);
+
+    expect(events.at(-1)).toMatchObject({
+      type: "done",
+      messageId,
+      aiRunId,
+      openaiResponseId: "resp_123",
+    });
+    expect(deps.completePlanningChatRun).toHaveBeenCalledTimes(1);
+    expect(deps.completePlanningChatRun).toHaveBeenCalledWith({
+      aiRunId,
+      conversationId,
+      content: "Hello",
+      openaiResponseId: "resp_123",
+      inputTokens: 12,
+      outputTokens: 8,
+    });
+    expect(deps.completedPlanningRuns).toEqual([
+      { content: "Hello", aiRunId, conversationId },
+    ]);
+    expect(deps.failAiRun).not.toHaveBeenCalled();
+  });
+
+  it("does not persist a stale assistant reply when fenced completion reports ownership loss", async () => {
+    const deps = createMockDeps({
+      completePlanningChatRun: vi.fn(async () => {
+        throw new PlanningRunOwnershipLostError();
+      }),
+    });
+    const stream = await createPlanningChatStream(
+      createRequest(async () => [{ role: "user", content: "Hello" }]),
+      deps,
+    );
+    const events = await readNdjsonStream(stream);
+
+    expect(events).toEqual([
+      { type: "delta", text: "Hello" },
+      { type: "error", message: PUBLIC_CHAT_STREAM_ERROR_MESSAGE },
+    ]);
+    expect(deps.completePlanningChatRun).toHaveBeenCalledTimes(1);
+    expect(deps.failAiRun).toHaveBeenCalledTimes(1);
+    expect(events.some((event) => event.type === "done")).toBe(false);
+  });
+
   it("returns one standard error event when prepareInputAfterUserInsert throws DatabaseError", async () => {
     const deps = createMockDeps();
 
@@ -249,7 +345,8 @@ describe("createPlanningChatStream", () => {
     expect(events).toEqual([
       { type: "error", message: PUBLIC_CHAT_STREAM_ERROR_MESSAGE },
     ]);
-    expect(deps.createAiRun).not.toHaveBeenCalled();
+    expect(deps.beginPlanningChatAiRun).toHaveBeenCalledTimes(1);
+    expect(deps.failAiRun).toHaveBeenCalledTimes(1);
     expect(deps.createResponseStream).not.toHaveBeenCalled();
   });
 
@@ -267,7 +364,8 @@ describe("createPlanningChatStream", () => {
     expect(events).toEqual([
       { type: "error", message: PUBLIC_CHAT_STREAM_ERROR_MESSAGE },
     ]);
-    expect(deps.createAiRun).not.toHaveBeenCalled();
+    expect(deps.beginPlanningChatAiRun).toHaveBeenCalledTimes(1);
+    expect(deps.failAiRun).toHaveBeenCalledTimes(1);
     expect(deps.createResponseStream).not.toHaveBeenCalled();
   });
 
@@ -285,7 +383,8 @@ describe("createPlanningChatStream", () => {
     expect(events).toEqual([
       { type: "error", message: PUBLIC_CHAT_STREAM_ERROR_MESSAGE },
     ]);
-    expect(deps.createAiRun).not.toHaveBeenCalled();
+    expect(deps.beginPlanningChatAiRun).toHaveBeenCalledTimes(1);
+    expect(deps.failAiRun).toHaveBeenCalledTimes(1);
     expect(deps.createResponseStream).not.toHaveBeenCalled();
   });
 
@@ -300,11 +399,12 @@ describe("createPlanningChatStream", () => {
         deps,
       ),
     ).rejects.toThrow("unexpected");
-    expect(deps.createAiRun).not.toHaveBeenCalled();
+    expect(deps.beginPlanningChatAiRun).toHaveBeenCalledTimes(1);
+    expect(deps.failAiRun).toHaveBeenCalledTimes(1);
     expect(deps.createResponseStream).not.toHaveBeenCalled();
   });
 
-  it("rejects when insertUserMessage fails and does not invoke prepareInputAfterUserInsert", async () => {
+  it("fails the acquired run and rethrows when insertUserMessage fails", async () => {
     const prepareInputAfterUserInsert = vi.fn(async () => {
       return [{ role: "user", content: "Hello" }];
     });
@@ -320,13 +420,16 @@ describe("createPlanningChatStream", () => {
         deps,
       ),
     ).rejects.toThrow(DatabaseError);
+    expect(deps.beginPlanningChatAiRun).toHaveBeenCalledTimes(1);
+    expect(deps.failAiRun).toHaveBeenCalledTimes(1);
     expect(prepareInputAfterUserInsert).not.toHaveBeenCalled();
+    expect(deps.createResponseStream).not.toHaveBeenCalled();
   });
 
-  it("rejects when createAiRun fails and does not call OpenAI", async () => {
+  it("fails the acquired run and does not call OpenAI when acquisition fails", async () => {
     const deps = createMockDeps({
-      createAiRun: vi.fn(async () => {
-        throw new DatabaseError("create ai run failed");
+      beginPlanningChatAiRun: vi.fn(async () => {
+        throw new DatabaseError("acquire failed");
       }),
     });
 
@@ -336,6 +439,7 @@ describe("createPlanningChatStream", () => {
         deps,
       ),
     ).rejects.toThrow(DatabaseError);
+    expect(deps.insertUserMessage).not.toHaveBeenCalled();
     expect(deps.createResponseStream).not.toHaveBeenCalled();
   });
 });

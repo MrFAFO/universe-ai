@@ -5,13 +5,14 @@ import { resolveAncestorContext } from "@/lib/ai/ancestor-context";
 import { getOpenAIClient, getOpenAIModel } from "@/lib/ai/openai";
 import { buildTopicResponsesInput } from "@/lib/ai/topic-prompt";
 import {
-  completeAiRun,
-  createAiRun,
   failAiRun,
-  insertAssistantMessage,
   insertUserMessage,
   listConversationMessages,
 } from "@/lib/db/chat";
+import {
+  beginPlanningChatAiRun,
+  completePlanningChatRun,
+} from "@/lib/db/planning-chat-runs";
 import {
   ensureTopicPlanningConversation,
   listWorldNodesForAncestorContext,
@@ -69,9 +70,8 @@ export function createDefaultTopicPlanningChatDeps(): TopicPlanningChatDeps {
     listConversationMessages,
     listWorldNodesForAncestorContext,
     insertUserMessage,
-    insertAssistantMessage,
-    createAiRun,
-    completeAiRun,
+    beginPlanningChatAiRun,
+    completePlanningChatRun,
     failAiRun,
     getModel: getOpenAIModel,
     createResponseStream: (params, options) =>

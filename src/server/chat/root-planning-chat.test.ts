@@ -4,6 +4,7 @@ import { ROOT_PLANNING_SYSTEM_PROMPT } from "@/lib/ai/prompt";
 import { PUBLIC_CHAT_STREAM_ERROR_MESSAGE } from "@/lib/ai/stream-protocol";
 import type { RootPlanningContext } from "@/lib/db/chat";
 import { DatabaseError } from "@/lib/db/errors";
+import { PlanningRunInProgressError } from "@/lib/db/planning-chat-runs";
 import {
   createRootPlanningChatStream,
   type RootPlanningChatDeps,
@@ -127,16 +128,13 @@ function createMockDeps(
   overrides: Partial<RootPlanningChatDeps> = {},
 ): RootPlanningChatDeps & {
   calls: string[];
-  insertedAssistantMessages: Array<{ content: string; aiRunId: string }>;
+  completedPlanningRuns: Array<{ content: string; aiRunId: string }>;
   failSummaries: string[];
-  completeCalls: number;
   createResponseStreamCalls: number;
 } {
   const calls: string[] = [];
-  const insertedAssistantMessages: Array<{ content: string; aiRunId: string }> =
-    [];
+  const completedPlanningRuns: Array<{ content: string; aiRunId: string }> = [];
   const failSummaries: string[] = [];
-  let completeCalls = 0;
   let createResponseStreamCalls = 0;
 
   const baseMessages: DbMessage[] = [
@@ -150,15 +148,13 @@ function createMockDeps(
 
   const deps: RootPlanningChatDeps & {
     calls: string[];
-    insertedAssistantMessages: Array<{ content: string; aiRunId: string }>;
+    completedPlanningRuns: Array<{ content: string; aiRunId: string }>;
     failSummaries: string[];
-    completeCalls: number;
     createResponseStreamCalls: number;
   } = {
     calls,
-    insertedAssistantMessages,
+    completedPlanningRuns,
     failSummaries,
-    completeCalls,
     createResponseStreamCalls,
     resolveRootPlanningConversation: vi.fn(async () => {
       calls.push("resolve");
@@ -189,24 +185,17 @@ function createMockDeps(
         content,
       });
     }),
-    insertAssistantMessage: vi.fn(async (_conversationId, content, runId) => {
-      calls.push("insertAssistant");
-      insertedAssistantMessages.push({ content, aiRunId: runId });
-      return makeMessage({
-        id: "m-assistant",
-        role: "assistant",
-        ordinal: 3,
-        content,
-        ai_run_id: runId,
-      });
-    }),
-    createAiRun: vi.fn(async () => {
-      calls.push("createAiRun");
+    beginPlanningChatAiRun: vi.fn(async () => {
+      calls.push("beginPlanningChatAiRun");
       return { id: aiRunId };
     }),
-    completeAiRun: vi.fn(async () => {
-      calls.push("completeAiRun");
-      completeCalls += 1;
+    completePlanningChatRun: vi.fn(async (input) => {
+      calls.push("completePlanningChatRun");
+      completedPlanningRuns.push({
+        content: input.content,
+        aiRunId: input.aiRunId,
+      });
+      return { messageId: "m-assistant" };
     }),
     failAiRun: vi.fn(async (_runId, summary) => {
       calls.push("failAiRun");
@@ -240,6 +229,9 @@ describe("createRootPlanningChatStream", () => {
 
     expect(deps.calls.indexOf("insertUser")).toBeLessThan(
       deps.calls.indexOf("createResponseStream"),
+    );
+    expect(deps.calls.indexOf("beginPlanningChatAiRun")).toBeLessThan(
+      deps.calls.indexOf("insertUser"),
     );
     expect(deps.calls.indexOf("list")).toBeGreaterThan(
       deps.calls.indexOf("insertUser"),
@@ -290,11 +282,28 @@ describe("createRootPlanningChatStream", () => {
     expect(events).toEqual([
       { type: "error", message: PUBLIC_CHAT_STREAM_ERROR_MESSAGE },
     ]);
-    expect(deps.createAiRun).not.toHaveBeenCalled();
+    expect(deps.beginPlanningChatAiRun).toHaveBeenCalledTimes(1);
+    expect(deps.failAiRun).toHaveBeenCalledTimes(1);
     expect(deps.createResponseStream).not.toHaveBeenCalled();
   });
 
-  it("streams ordered deltas, persists one assistant message, and completes the run once", async () => {
+  it("propagates PlanningRunInProgressError without persisting the user message or starting OpenAI", async () => {
+    const deps = createMockDeps({
+      beginPlanningChatAiRun: vi.fn(async () => {
+        throw new PlanningRunInProgressError();
+      }),
+    });
+
+    await expect(
+      createRootPlanningChatStream({ worldId, nodeId, content: "Hello" }, deps),
+    ).rejects.toThrow(PlanningRunInProgressError);
+
+    expect(deps.insertUserMessage).not.toHaveBeenCalled();
+    expect(deps.createResponseStream).not.toHaveBeenCalled();
+    expect(deps.failAiRun).not.toHaveBeenCalled();
+  });
+
+  it("streams ordered deltas, completes through fenced finalization, and completes the run once", async () => {
     const deps = createMockDeps();
     const stream = await createRootPlanningChatStream(
       { worldId, nodeId, content: "Hello" },
@@ -312,11 +321,10 @@ describe("createRootPlanningChatStream", () => {
       aiRunId,
       openaiResponseId: "resp_123",
     });
-    expect(deps.insertedAssistantMessages).toEqual([
+    expect(deps.completedPlanningRuns).toEqual([
       { content: "Hello", aiRunId },
     ]);
-    expect(deps.insertAssistantMessage).toHaveBeenCalledTimes(1);
-    expect(deps.completeAiRun).toHaveBeenCalledTimes(1);
+    expect(deps.completePlanningChatRun).toHaveBeenCalledTimes(1);
     expect(deps.failAiRun).not.toHaveBeenCalled();
   });
 
@@ -344,8 +352,7 @@ describe("createRootPlanningChatStream", () => {
       { type: "delta", text: "Part" },
       { type: "error", message: PUBLIC_CHAT_STREAM_ERROR_MESSAGE },
     ]);
-    expect(deps.insertAssistantMessage).not.toHaveBeenCalled();
-    expect(deps.completeAiRun).not.toHaveBeenCalled();
+    expect(deps.completePlanningChatRun).not.toHaveBeenCalled();
     expect(deps.failAiRun).toHaveBeenCalledTimes(1);
   });
 
@@ -370,7 +377,7 @@ describe("createRootPlanningChatStream", () => {
     expect(events).toEqual([
       { type: "error", message: PUBLIC_CHAT_STREAM_ERROR_MESSAGE },
     ]);
-    expect(deps.insertAssistantMessage).not.toHaveBeenCalled();
+    expect(deps.completePlanningChatRun).not.toHaveBeenCalled();
     expect(deps.failAiRun).toHaveBeenCalledTimes(1);
     expect(deps.failSummaries[0]).toBe("Request aborted.");
   });
@@ -410,7 +417,7 @@ describe("createRootPlanningChatStream", () => {
       { type: "error", message: PUBLIC_CHAT_STREAM_ERROR_MESSAGE },
     ]);
     expect(deps.failAiRun).toHaveBeenCalledTimes(1);
-    expect(deps.completeAiRun).not.toHaveBeenCalled();
+    expect(deps.completePlanningChatRun).not.toHaveBeenCalled();
   });
 
   it("marks the run failed when the stream is cancelled", async () => {
@@ -453,7 +460,7 @@ describe("createRootPlanningChatStream", () => {
 
       await reader.cancel();
 
-      expect(deps.insertAssistantMessage).not.toHaveBeenCalled();
+      expect(deps.completePlanningChatRun).not.toHaveBeenCalled();
       expect(deps.failAiRun).toHaveBeenCalledTimes(1);
       expect(deps.failSummaries[0]).toBe("Stream cancelled.");
       expect(unhandledRejections).toEqual([]);

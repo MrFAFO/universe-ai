@@ -3,16 +3,17 @@ import "server-only";
 import { buildResponsesInput } from "@/lib/ai/prompt";
 import { getOpenAIClient, getOpenAIModel } from "@/lib/ai/openai";
 import {
-  completeAiRun,
-  createAiRun,
   failAiRun,
-  insertAssistantMessage,
   insertUserMessage,
   listConversationMessages,
   listWorldNodeTitles,
   resolveRootPlanningConversation,
   type RootPlanningContext,
 } from "@/lib/db/chat";
+import {
+  beginPlanningChatAiRun,
+  completePlanningChatRun,
+} from "@/lib/db/planning-chat-runs";
 import type { DbMessage } from "@/types/db";
 import {
   createPlanningChatStream,
@@ -38,9 +39,8 @@ export function createDefaultRootPlanningChatDeps(): RootPlanningChatDeps {
     listConversationMessages,
     listWorldNodeTitles,
     insertUserMessage,
-    insertAssistantMessage,
-    createAiRun,
-    completeAiRun,
+    beginPlanningChatAiRun,
+    completePlanningChatRun,
     failAiRun,
     getModel: getOpenAIModel,
     createResponseStream: (params, options) =>

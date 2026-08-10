@@ -22,21 +22,19 @@ export interface PlanningChatStreamRequest {
 }
 
 export interface PlanningChatStreamDeps {
+  beginPlanningChatAiRun(input: {
+    conversationId: string;
+    model: string;
+  }): Promise<{ id: string }>;
   insertUserMessage(conversationId: string, content: string): Promise<DbMessage>;
-  insertAssistantMessage(
-    conversationId: string,
-    content: string,
-    aiRunId: string,
-  ): Promise<DbMessage>;
-  createAiRun(conversationId: string, model: string): Promise<{ id: string }>;
-  completeAiRun(
-    aiRunId: string,
-    input: {
-      openaiResponseId: string | null;
-      inputTokens: number | null;
-      outputTokens: number | null;
-    },
-  ): Promise<void>;
+  completePlanningChatRun(input: {
+    aiRunId: string;
+    conversationId: string;
+    content: string;
+    openaiResponseId: string | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+  }): Promise<{ messageId: string }>;
   failAiRun(aiRunId: string, errorSummary: string): Promise<void>;
   getModel(): string;
   createResponseStream(
@@ -61,6 +59,10 @@ function isAbortError(error: unknown): boolean {
     (error instanceof DOMException && error.name === "AbortError") ||
     (error instanceof Error && error.name === "AbortError")
   );
+}
+
+function summarizeError(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message.slice(0, 500) : fallback;
 }
 
 function combineAbortSignals(
@@ -115,22 +117,44 @@ export async function createPlanningChatStream(
   request: PlanningChatStreamRequest,
   deps: PlanningChatStreamDeps,
 ): Promise<ReadableStream<Uint8Array>> {
-  await deps.insertUserMessage(request.conversationId, request.content);
+  const model = deps.getModel();
+  const aiRun = await deps.beginPlanningChatAiRun({
+    conversationId: request.conversationId,
+    model,
+  });
+
+  const failAcquiredRun = async (summary: string): Promise<void> => {
+    try {
+      await deps.failAiRun(aiRun.id, summary);
+    } catch {
+      // Best-effort cleanup for an acquired run.
+    }
+  };
+
+  try {
+    await deps.insertUserMessage(request.conversationId, request.content);
+  } catch (error) {
+    await failAcquiredRun(
+      summarizeError(error, "Unable to persist user message."),
+    );
+    throw error;
+  }
 
   let input: ResponseInput;
 
   try {
     input = await request.prepareInputAfterUserInsert();
   } catch (error) {
+    const summary = summarizeError(error, "Unable to prepare planning input.");
+
     if (isSafePrepareInputError(error)) {
+      await failAcquiredRun(summary);
       return createErrorOnlyStream();
     }
 
+    await failAcquiredRun(summary);
     throw error;
   }
-
-  const model = deps.getModel();
-  const aiRun = await deps.createAiRun(request.conversationId, model);
 
   const runState = { finalized: false };
   const consumerState = { lifecycle: "writable" as ConsumerLifecycle };
@@ -243,25 +267,22 @@ export async function createPlanningChatStream(
           return;
         }
 
-        let assistantMessage;
+        let messageId: string;
         try {
-          assistantMessage = await deps.insertAssistantMessage(
-            request.conversationId,
-            assistantText,
-            aiRun.id,
-          );
-
-          await deps.completeAiRun(aiRun.id, {
+          const result = await deps.completePlanningChatRun({
+            aiRunId: aiRun.id,
+            conversationId: request.conversationId,
+            content: assistantText,
             openaiResponseId: completedResponseId,
             inputTokens,
             outputTokens,
           });
+          messageId = result.messageId;
         } catch (error) {
-          const summary =
-            error instanceof Error
-              ? error.message.slice(0, 500)
-              : "Unable to persist assistant response.";
-          await finalizeFailure(summary, { notifyConsumer: true });
+          await finalizeFailure(
+            summarizeError(error, "Unable to persist assistant response."),
+            { notifyConsumer: true },
+          );
           return;
         }
 
@@ -273,7 +294,7 @@ export async function createPlanningChatStream(
         enqueueToConsumer(
           encodeNdjsonBytes({
             type: "done",
-            messageId: assistantMessage.id,
+            messageId,
             aiRunId: aiRun.id,
             openaiResponseId: completedResponseId,
           }),
@@ -355,9 +376,7 @@ export async function createPlanningChatStream(
         }
 
         await finalizeFailure(
-          error instanceof Error
-            ? error.message.slice(0, 500)
-            : "Unknown streaming failure.",
+          summarizeError(error, "Unknown streaming failure."),
           { notifyConsumer: true },
         );
       }
