@@ -28,6 +28,7 @@ import {
   appendRootPlanningMessageDeduped,
   type RootPlanningChatMessage,
 } from "@/lib/chat/root-planning-messages";
+import { tryReadPlanningChatConflictFromResponse } from "@/lib/chat/planning-chat-conflict";
 import { buildRootPlanningTimeline } from "@/lib/chat/root-planning-timeline";
 import { BranchSuggestionCard } from "@/components/chat/BranchSuggestionCard";
 import type { BranchSuggestionDecisionState } from "@/components/chat/BranchSuggestionCard";
@@ -125,8 +126,14 @@ export function RootPlanningChat({
     };
   }, []);
 
+  const endStreamingGuard = useCallback(() => {
+    isStreamingRef.current = false;
+    setIsStreaming(false);
+  }, []);
+
   const handleStreamFailure = useCallback(
     (assistantTempId: string, errorMessage: string) => {
+      endStreamingGuard();
       setRequestError(errorMessage);
       setMessages((current) =>
         current
@@ -145,7 +152,7 @@ export function RootPlanningChat({
       );
       router.refresh();
     },
-    [router],
+    [endStreamingGuard, router],
   );
 
   const handleGenerate = useCallback(async () => {
@@ -446,6 +453,18 @@ export function RootPlanningChat({
               message.id !== assistantTempId && message.id !== userTempId,
           ),
         );
+
+        const conflictMessage =
+          await tryReadPlanningChatConflictFromResponse(response);
+        if (conflictMessage) {
+          endStreamingGuard();
+          setInput(content);
+          setRequestError(conflictMessage);
+          router.refresh();
+          return;
+        }
+
+        endStreamingGuard();
         setRequestError(SAFE_REQUEST_ERROR_MESSAGE);
         router.refresh();
         return;
@@ -593,7 +612,7 @@ export function RootPlanningChat({
         abortControllerRef.current = null;
       }
     }
-  }, [handleStreamFailure, input, nodeId, router, worldId]);
+  }, [endStreamingGuard, handleStreamFailure, input, nodeId, router, worldId]);
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {

@@ -49,3 +49,18 @@ export async function readPlanningChatConflictMessage(
     return fallbackMessage;
   }
 }
+
+export async function tryReadPlanningChatConflictFromResponse(
+  response: Response,
+): Promise<string | null> {
+  if (response.status !== 409) {
+    return null;
+  }
+
+  try {
+    const raw: unknown = await response.json();
+    return extractPlanningChatConflictMessage(raw);
+  } catch {
+    return null;
+  }
+}

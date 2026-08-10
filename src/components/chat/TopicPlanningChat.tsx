@@ -13,6 +13,7 @@ import {
 } from "react";
 import { PUBLIC_CHAT_STREAM_ERROR_MESSAGE } from "@/lib/ai/stream-protocol";
 import { createNdjsonStreamParser } from "@/lib/ai/stream-parser";
+import { tryReadPlanningChatConflictFromResponse } from "@/lib/chat/planning-chat-conflict";
 import {
   type RootPlanningChatMessage,
 } from "@/lib/chat/root-planning-messages";
@@ -191,6 +192,17 @@ export function TopicPlanningChat({
               message.id !== assistantTempId && message.id !== userTempId,
           ),
         );
+
+        const conflictMessage =
+          await tryReadPlanningChatConflictFromResponse(response);
+        if (conflictMessage) {
+          endStreamingGuard();
+          setInput(content);
+          setRequestError(conflictMessage);
+          router.refresh();
+          return;
+        }
+
         endStreamingGuard();
         setRequestError(SAFE_REQUEST_ERROR_MESSAGE);
         router.refresh();

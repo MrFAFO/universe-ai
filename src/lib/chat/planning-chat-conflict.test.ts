@@ -6,6 +6,7 @@ import {
   PLANNING_CHAT_CONFLICT_CODE,
   PLANNING_CHAT_CONFLICT_MESSAGES,
   readPlanningChatConflictMessage,
+  tryReadPlanningChatConflictFromResponse,
 } from "@/lib/chat/planning-chat-conflict";
 
 describe("planning chat conflict contract", () => {
@@ -55,6 +56,15 @@ describe("planning chat conflict contract", () => {
     ).toBeNull();
   });
 
+  it("uses the stable conflict copy rather than server-provided error text", () => {
+    expect(
+      extractPlanningChatConflictMessage({
+        error: "raw database connection failed",
+        code: PLANNING_CHAT_CONFLICT_CODE,
+      }),
+    ).toBe(PLANNING_CHAT_CONFLICT_MESSAGES.planning_run_in_progress);
+  });
+
   it("reads a stable conflict message from a 409 response body", async () => {
     const response = new Response(JSON.stringify(validPayload), {
       status: 409,
@@ -74,5 +84,37 @@ describe("planning chat conflict contract", () => {
     await expect(
       readPlanningChatConflictMessage(response, "fallback"),
     ).resolves.toBe("fallback");
+  });
+
+  it("returns null for non-409 responses", async () => {
+    const response = new Response(
+      JSON.stringify({ error: "database unavailable" }),
+      { status: 500 },
+    );
+
+    await expect(
+      tryReadPlanningChatConflictFromResponse(response),
+    ).resolves.toBeNull();
+  });
+
+  it("returns null for malformed 409 payloads", async () => {
+    const response = new Response(
+      JSON.stringify({ error: "database unavailable", code: "persistence_error" }),
+      { status: 409 },
+    );
+
+    await expect(
+      tryReadPlanningChatConflictFromResponse(response),
+    ).resolves.toBeNull();
+  });
+
+  it("returns the stable conflict message for recognized 409 payloads", async () => {
+    const response = new Response(JSON.stringify(validPayload), {
+      status: 409,
+    });
+
+    await expect(
+      tryReadPlanningChatConflictFromResponse(response),
+    ).resolves.toBe(PLANNING_CHAT_CONFLICT_MESSAGES.planning_run_in_progress);
   });
 });
