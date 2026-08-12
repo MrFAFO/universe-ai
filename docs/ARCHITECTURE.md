@@ -2,7 +2,7 @@
 
 Durable technical architecture for Stage D and beyond. For product context see `docs/PROJECT.md`. For UI behavior see `docs/UI.md`. For implementation progress and the **Resume Here** handoff see `docs/CURRENT_STATE.md`.
 
-**Post-Stage-D status:** Stage D is **implemented** and merged into `main` at `95e09f6`. Stage E (Non-root Planning) is the **immediate next** implementation stage. Stages F–I are **approved but not implemented**.
+**Post-Stage-D status:** Stage D is **implemented** and merged into `main` at `95e09f6`. Stage E (Non-root Planning) and Stage E.1 (Planning Chat Concurrency Hardening) are **implemented and manually accepted** on branch `stage-e1-planning-chat-concurrency-hardening`. The **immediate next implementation milestone** is the **UI redesign gate**, then Stage F. Stages F–I are **approved but not implemented**.
 
 ---
 
@@ -44,7 +44,9 @@ Structural change rules:
 
 | Stage | Capability | Status |
 |---|---|---|
-| **E** | Non-root Planning | Approved — **next** |
+| **E** | Non-root Planning | **Implemented** — manually accepted |
+| **E.1** | Planning Chat Concurrency Hardening | **Implemented** — manually accepted |
+| **UI redesign** | UI redesign gate | **Next** — not started (before Stage F) |
 | **F** | Secondary Relations MVP | Approved — not implemented |
 | **G** | AI Relation Proposals | Approved — not implemented |
 | **H** | Impact Review | Approved — not implemented |
@@ -522,11 +524,13 @@ Accepted at commit `95e09f6`. See `docs/CURRENT_STATE.md` for validation results
 
 ---
 
-## Stage E — Non-root Planning (approved, not implemented)
+## Stage E — Non-root Planning (implemented)
 
 ### Purpose
 
 Make every Topic Node a real planning workspace with its own persistent Planning conversation, reusing proven streaming and persistence infrastructure without weakening Root Planning invariants.
+
+Accepted at `e282d69` on branch `stage-e-non-root-planning`. See `docs/CURRENT_STATE.md` for validation results.
 
 ### Boundaries
 
@@ -573,6 +577,61 @@ Same contextual-data-not-instructions delimiter pattern as the Root Planning Wor
 *Automated:* cross-World rejection; resolver separation; topic-only flow; one conversation per node; message persistence and ordinal ordering; deterministic ancestor context; Root Planning regression tests pass.
 
 *Manual:* open Topic Node Planning chat; send/receive messages; refresh and reopen; ancestor context influences responses; Root Planning unchanged.
+
+---
+
+## Planning Chat Concurrency (Stage E.1)
+
+Stage E.1 hardened Planning chat concurrency for **Root and Topic Planning** using one shared mechanism. Branch Suggestions remain separate and unchanged.
+
+Implementation through `db9198c` was manually accepted on branch `stage-e1-planning-chat-concurrency-hardening`. See `docs/CURRENT_STATE.md` for validation and manual acceptance.
+
+### Invariants
+
+- **One active `planning_chat` run per conversation** — at most one `ai_runs` row with `status = 'running'` and `metadata.purpose = 'planning_chat'` per Planning conversation.
+- **Acquisition before user persistence** — `begin_planning_chat_ai_run` runs before `insertUserMessage`, so a rejected concurrent send persists nothing and never calls OpenAI.
+- **Database-enforced partial unique index:**
+
+```sql
+create unique index ai_runs_one_running_planning_chat_per_conversation_idx
+  on public.ai_runs (conversation_id)
+  where status = 'running'::public.ai_run_status
+    and metadata ->> 'purpose' = 'planning_chat';
+```
+
+- **Transactional acquisition** — `begin_planning_chat_ai_run` uses `pg_advisory_xact_lock(hashtext(conversation_id), hashtext('planning_chat_conversation'))`, re-validates conversation and node after the lock, sweeps stale `planning_chat` runs older than the lease, then inserts or raises `planning_run_in_progress`.
+- **5-minute stale lease** — abandoned `planning_chat` runs are failed so a crashed stream cannot wedge a conversation forever. This is a **lease/fencing policy**, not a response-time guarantee.
+- **Fencing token** — the acquired `ai_run` id plus `status = 'running'` is the ownership proof; **no separate epoch column**.
+- **Atomic completion** — `complete_planning_chat_ai_run` row-locks the run, verifies conversation, status, and `purpose = 'planning_chat'`, then inserts the assistant message and marks the run `completed` in one transaction.
+- **Discard on fence loss** — if ownership is lost (lease expiry, stale reclamation), fenced completion raises `planning_run_not_active`; stale assistant output is **not persisted**; the client receives a terminal NDJSON `error` event, not `done`.
+- **HTTP 409 conflict contract** — pre-stream acquisition conflict maps to `{ error: <safe copy>, code: "planning_run_in_progress" }`. Client components validate the payload via `src/lib/chat/planning-chat-conflict.ts` (client-safe; no `src/lib/db/*` imports).
+- **Root and Topic parity** — both orchestrators delegate to `createPlanningChatStream` with the same deps contract.
+- **Branch Suggestions unchanged** — Branch Suggestions retain their existing separate lifecycle and remain Root-only. `src/lib/db/chat.ts` was not modified by Stage E.1.
+
+### RPCs (service_role only, `SECURITY DEFINER`, `set search_path = ''`)
+
+Migration: `supabase/migrations/20260808000000_planning_chat_run_acquisition.sql`
+
+| RPC | Role |
+|---|---|
+| `begin_planning_chat_ai_run(uuid, text)` | Acquire run; purpose-scoped stale sweep; insert `metadata = {"purpose":"planning_chat"}` |
+| `complete_planning_chat_ai_run(uuid, uuid, text, text, integer, integer)` | Fenced atomic assistant insert + run completion |
+
+### Deployment invariant (first fenced activation)
+
+- The transition from unfenced legacy Planning writers to the fenced writer requires **old-writer quiescence** — legacy and fenced writers must **not coexist** during first activation.
+- For multi-instance first activation, use **drain-and-replace**, not a rolling deployment, until every writer implements fencing.
+- After all active writers use the fenced protocol, normal rolling deployments are safe again.
+- Legacy `running` Planning `ai_runs` with `metadata = null` are **not backfilled** into `planning_chat` ownership.
+
+### Accepted architectural tradeoffs
+
+- **B1 — Lease discard:** A legitimate response running longer than the 5-minute lease may lose ownership; assistant output is discarded and the user message may remain unanswered.
+- **B2 — Committed-but-lost response:** Atomic finalization may commit while the client loses the RPC response; the UI may show a transient stream error until refresh reconciles to persisted history.
+
+### Known follow-up (not a concurrency invariant)
+
+A failed Planning turn after user-message persistence can leave an unanswered user message in history that later model input may include. This is a separate follow-up issue, not a blocker for E.1 acceptance.
 
 ---
 
@@ -768,12 +827,24 @@ Relations MVP (Stage F) and non-root Planning (Stage E) must precede reconciliat
 
 Exact commit grouping may be adjusted. Stage order must be preserved.
 
-### Stage E — Non-root Planning
+### Stage E — Non-root Planning (complete)
 
 1. Define final resolver boundaries and route shape.
 2. Implement Topic Node Planning conversation resolution.
 3. Add ancestor-path context builder.
 4. Wire streaming and persistence; verify Root Planning regression.
+
+### Stage E.1 — Planning Chat Concurrency Hardening (complete)
+
+1. Migration: partial unique index, `begin_planning_chat_ai_run`, `complete_planning_chat_ai_run`.
+2. Planning-only DB wrappers and error classification (`planning-chat-runs.ts`).
+3. API HTTP 409 mapping and client-safe conflict contract.
+4. Client conflict handling (Root and Topic).
+5. Activate acquisition-before-persist and fenced completion in shared stream core.
+
+### UI redesign gate (next)
+
+Product-owner milestone between E.1 and Stage F. Detailed scope is not specified in this architecture document.
 
 ### Stage F — Secondary Relations MVP
 

@@ -13,12 +13,12 @@ A new developer or AI conversation should start here without relying on prior ch
    - `git status -sb`
    - `git branch --show-current`
    - `git log --oneline --decorate --max-count=5`
-3. **Confirm** you are on `stage-e-non-root-planning` (or a descendant branch created for Stage E.1 work).
-4. **Do not start relation implementation.** Relations are Stage F and later. **Stage F must not begin before Stage E.1 is completed.**
-5. **Next work is Stage E.1 — Planning Chat Concurrency Hardening.** Stage E — Non-root Planning is complete and manually accepted on this branch.
+3. **Confirm** you are on `stage-e1-planning-chat-concurrency-hardening` (or a descendant branch for follow-on work).
+4. **Do not start relation implementation.** Relations are Stage F and later. **Stage F must not begin before the UI redesign milestone is completed and accepted.**
+5. **Stage E.1 — Planning Chat Concurrency Hardening is complete and manually accepted** on this branch.
 6. **Preserve all Stage D invariants** (see `docs/ARCHITECTURE.md` — Stage D boundary). Root Planning behaviour must not regress.
-7. **Approved sequence:** Stage E → Stage E.1 Planning Chat Concurrency Hardening → Stage F.
-8. **Stage E.1 must be planned and reviewed before implementation.** Request explicit product approval before expanding Stage E.1 beyond the already approved concurrency-hardening boundary.
+7. **Approved sequence:** Stage E → Stage E.1 → **UI redesign gate** → Stage F.
+8. **Next work is the UI redesign milestone** (product-owner gate between E.1 and F). Do not start Stage F until that milestone is completed and accepted.
 
 ---
 
@@ -26,28 +26,84 @@ A new developer or AI conversation should start here without relying on prior ch
 
 | Item | Value |
 |---|---|
-| **Completed stage** | Stage E — Non-root Planning |
+| **Completed stage** | Stage E.1 — Planning Chat Concurrency Hardening |
 | **Acceptance** | Manually accepted |
 | **Merged into `main`** | No — implementation on working branch |
-| **`main` / `origin/main`** | Both at `95e09f6` (verified) |
-| **Implementation commits** | `609919b` target resolver · `2546253` conversation provisioning · `c7530b0` context and prompt · `3595c14` shared stream and topic orchestration · `020340e` UI and routing |
-| **Prior completed stage** | Stage D — Branch Suggestions and initial structure creation (`95e09f6`, merged to `main`) |
-| **Current working branch** | `stage-e-non-root-planning` |
-| **Immediate next stage** | Stage E.1 — Planning Chat Concurrency Hardening (**not yet implemented**) |
+| **`main` / `origin/main`** | Both at `95e09f6` (verified at Stage E acceptance) |
+| **Stage E accepted baseline** | `e282d69` — docs: record stage e acceptance |
+| **Stage E.1 implementation commits** | `99d6644` database layer · `31d698f` API conflict mapping · `4318870` client conflict handling · `db9198c` activation and fenced completion |
+| **Prior completed stage** | Stage E — Non-root Planning (`e282d69`, manually accepted on this branch) |
+| **Current working branch** | `stage-e1-planning-chat-concurrency-hardening` |
+| **Stage E.1 implementation tip** | `db9198c` — activation and fenced completion |
+| **Immediate next milestone** | **UI redesign gate** (not Stage F) |
 
 ---
 
 ## Immediate Next Task
 
-1. Define or review the **Stage E.1 — Planning Chat Concurrency Hardening** plan and acceptance criteria.
-2. Implement Stage E.1 only after that plan is reviewed and approved.
-3. **Do not start Stage F** until Stage E.1 is complete.
-4. **No relation code yet.** Do not add `node_relations` writes, relation UI, or relation context injection during Stage E.1.
+1. **UI redesign milestone** — the product-owner gate between accepted Stage E.1 and Stage F. Detailed scope is not defined in this document; see `docs/UI.md` for visual direction where applicable.
+2. **Do not start Stage F** until the UI redesign milestone is completed and accepted.
+3. **No relation code yet.** Do not add `node_relations` writes, relation UI, or relation context injection before Stage F.
+4. **Preserve Stage E.1 Planning concurrency invariants** (see `docs/ARCHITECTURE.md` — Planning Chat Concurrency).
 
-### Stage E.1 planning obligations (not designed here)
+---
 
-- Stage E.1 must explicitly re-evaluate run-acquisition timing rather than assume acquisition simply replaces `createAiRun`.
-- Planning must consider whether acquisition should happen before user-message persistence so that a rejected concurrent send does not leave an unanswered persisted user message.
+## Stage E.1 — Planning Chat Concurrency Hardening (completed)
+
+Stage E.1 hardened Planning chat concurrency for **both Root and Topic Planning** using the same shared mechanism. Branch Suggestions remain Root-only with their separate lifecycle.
+
+**Delivered capabilities:**
+
+- Root Planning and Topic Planning share the same concurrency-hardened planning-chat run lifecycle via `createPlanningChatStream`.
+- At most one `running` `ai_run` with `metadata.purpose = 'planning_chat'` per Planning conversation (partial unique index).
+- Run acquisition (`begin_planning_chat_ai_run`) happens **before** user-message persistence.
+- A concurrent send is rejected before its user message is persisted and before OpenAI is called; `PlanningRunInProgressError` maps to HTTP **409** with code `planning_run_in_progress` and safe planning-chat conflict copy.
+- `RootPlanningChat` and `TopicPlanningChat` remove both optimistic temporary messages on that conflict, restore the exact trimmed submitted input, show the safe conflict message, release the streaming guard before `router.refresh()`, and reconcile to persisted state.
+- Successful assistant persistence and `ai_run` completion are **atomic** through the fenced `complete_planning_chat_ai_run` RPC (via `completePlanningChatRun` wrapper).
+- The `ai_run` id plus `status = 'running'` is the fencing token; **no separate epoch column**.
+- If ownership is lost (lease expiry or stale reclamation), stale assistant output is **discarded** rather than persisted; the client sees a stream `error` event, not a `done` event.
+- Branch Suggestions remain Root-only and continue using `begin_branch_suggestion_ai_run` and generic `chat.ts` helpers unchanged.
+- `src/lib/db/chat.ts` was **not modified** as part of Stage E.1.
+
+**Database / migration:**
+
+- `supabase/migrations/20260808000000_planning_chat_run_acquisition.sql`
+- Partial unique index: `ai_runs_one_running_planning_chat_per_conversation_idx`
+- `SECURITY DEFINER` RPCs (service_role only):
+  - `begin_planning_chat_ai_run(p_conversation_id uuid, p_model text)` — advisory transaction lock on conversation, purpose-scoped stale sweep, insert with `purpose = planning_chat`
+  - `complete_planning_chat_ai_run(p_ai_run_id uuid, p_conversation_id uuid, p_content text, p_openai_response_id text, p_input_tokens integer, p_output_tokens integer)` — row lock, ownership check, atomic assistant insert + completion
+
+**5-minute stale-run lease policy:**
+
+- Prevents abandoned `planning_chat` runs from blocking a conversation forever after a crash.
+- This is a **lease/fencing policy**, not a guarantee about real response duration.
+- A legitimate response running longer than the lease may lose ownership; its stale assistant output must be discarded (accepted tradeoff B1).
+
+**Deployment / activation invariant (durable):**
+
+- First activation of the fenced Planning writer required **old-writer quiescence** — legacy pre-E.1 Planning writers must never coexist with the new fenced writer during first activation.
+- For a future first activation in a multi-instance deployment, use **drain-and-replace**, not a rolling deployment, until every writer uses the fenced protocol.
+- Once all active writers implement fencing, normal rolling deployments are safe again.
+- Legacy `running` Planning `ai_runs` with `metadata = null` are **not backfilled** into `planning_chat` ownership.
+
+**Accepted edge cases / limitations (not Stage E.1 failures):**
+
+- **B1:** A legitimate Planning response running longer than the 5-minute lease may lose ownership; its assistant result is discarded and the user message may remain unanswered.
+- **B2:** Atomic finalization can commit successfully and then the network response can be lost; the client may show a transient error while `router.refresh()` reconciles to persisted state.
+
+**Manual-testing follow-up (known, not a concurrency invariant):**
+
+- If a Planning run fails after the user message was already persisted (for example a provider or incomplete response failure), that failed user message remains in persisted conversation history.
+- A later Planning request can therefore include that unanswered user turn in model context.
+- This was observed during an intentionally long manual test and is a known follow-up issue — not part of the concurrency invariant and not a blocker for Stage E.1 acceptance.
+- The exact provider failure cause was **not** proven to be output-token exhaustion.
+
+**Explicitly excluded from Stage E.1 (not delivered):**
+
+- Relations, Execution, Structure Reconciliation
+- Changes to Branch Suggestion acquisition or `generate-and-persist-branch-suggestion` behaviour
+- UI redesign
+- New dependencies
 
 ---
 
@@ -73,18 +129,11 @@ Stage E made every Topic Node a persistent Planning workspace while keeping Root
 - Automatic relation detection, manual relation editing, or relation context injection
 - Structure Reconciliation, Update Existing Structure, relation impact propagation
 - Full Context Engine, authentication
-- Planning chat concurrency hardening (Stage E.1)
-- New dependencies or migrations
+- New dependencies
 
-### Accepted concurrency limitation (addressed by Stage E.1, not Stage E)
+### Concurrency limitation (resolved by Stage E.1)
 
-- Two separate tabs or clients can still send simultaneously to the same Planning conversation.
-- Both completed replies persist.
-- Partial assistant output is not persisted.
-- Replies are coherent and not text-interleaved.
-- After refresh, all tabs converge to the same persisted message order.
-- Assistant completion order may differ from request-start order.
-- Stage E.1 Planning Chat Concurrency Hardening is the approved task that resolves this limitation.
+Stage E documented concurrent-send behaviour before E.1. Stage E.1 now enforces at most one active `planning_chat` run per conversation and rejects concurrent sends before user-message persistence. See Stage E.1 section above.
 
 ---
 
@@ -94,9 +143,10 @@ Ordered stages. Do not skip ahead.
 
 | Stage | Name | Status |
 |---|---|---|
-| **E** | Non-root Planning | **Complete — manually accepted** |
-| **E.1** | Planning Chat Concurrency Hardening | **Next — not implemented** |
-| **F** | Secondary Relations MVP | Approved, not implemented (do not start before E.1) |
+| **E** | Non-root Planning | **Complete — manually accepted** (`e282d69`) |
+| **E.1** | Planning Chat Concurrency Hardening | **Complete — manually accepted** (`db9198c`) |
+| **UI redesign** | UI redesign gate | **Next — not started** (product-owner gate before Stage F) |
+| **F** | Secondary Relations MVP | Approved, not implemented (do not start before UI redesign) |
 | **G** | AI Relation Proposals | Approved, not implemented |
 | **H** | Impact Review | Approved, not implemented |
 | **I** | Structure Reconciliation | Approved, not implemented |
@@ -278,7 +328,25 @@ Stage D delivered structured initial World structure proposals through Root Plan
 - Topic Node Planning chat open, send, receive, refresh, and reopen without losing history
 - Ancestor context influencing responses appropriately
 - Root Planning continuing to behave exactly as before
-- Concurrent sends from two tabs on the same Topic conversation (documents the accepted limitation above)
+- Concurrent sends from two tabs on the same Topic conversation (documents the pre-E.1 limitation; resolved by Stage E.1)
+
+### Stage E.1 completion (implementation through `db9198c`, manually accepted on `stage-e1-planning-chat-concurrency-hardening`)
+
+**Automated (C4 activation validation):**
+
+- `pnpm test`: 34/34 test files, 463/463 tests passed
+- `pnpm lint`: 0 errors; 1 pre-existing `@next/next/no-img-element` warning in `src/components/universe/UniverseHero.tsx`
+- `pnpm build`: success
+- `git diff --check`: clean
+
+**Manual acceptance passed:**
+
+- Topic Planning two-tab concurrency conflict: PASS
+- Topic retry after active run completion and refresh convergence: PASS
+- Root Planning two-tab concurrency conflict: PASS
+- Root retry after active run completion and refresh convergence: PASS
+- Branch Suggestion flow regression in Root: PASS
+- Branch Suggestion controls remain absent from Topic Planning: PASS
 
 ### Known lint warning
 
@@ -331,6 +399,10 @@ Dedicated Root Planning Chat at `/worlds/[worldId]/nodes/[nodeId]`; streaming vi
 
 Topic Node Planning chat on the same route with kind dispatch; dedicated Topic resolver and lazy conversation provisioning; ancestor-path context; `TopicPlanningChat` UI; Root Planning and Branch Suggestions unchanged; no relation behaviour.
 
+### Stage E.1 — Planning Chat Concurrency Hardening
+
+Acquisition-before-persist Planning chat runs; fenced atomic completion; HTTP 409 conflict contract; Root and Topic parity; Branch Suggestions unchanged; `chat.ts` unchanged. Migration `20260808000000_planning_chat_run_acquisition.sql` applied on target dev database.
+
 ### Application routes (current)
 
 - `/` — Universe Home
@@ -347,7 +419,7 @@ Topic Node Planning chat on the same route with kind dispatch; dedicated Topic r
 
 ## Not Yet Implemented
 
-- Planning Chat concurrency hardening (Stage E.1)
+- UI redesign milestone (gate before Stage F)
 - Relation create/edit/archive (Stage F)
 - AI relation proposals (Stage G)
 - Relation impact review (Stage H)
