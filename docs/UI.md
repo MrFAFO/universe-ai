@@ -1,5 +1,9 @@
 ﻿# Universe AI — UI Context
 
+For approved Product/UX v2 principles (involvement, legibility, delegation) see `docs/PRODUCT_UX_V2.md`. This file covers visual identity, **implemented** UI behavior, and approved UX direction not yet implemented.
+
+**UI redesign implementation has not started.** Final layouts, branding, and whether tree or graph is canonical (Decision 6) remain **open**.
+
 ## Visual Identity
 
 - Premium, mature and technological.
@@ -37,9 +41,13 @@ Avoid:
   - Model information when relevant
 - Clicking a World opens its World Map.
 
-## World Map
+## World Map (current implementation)
 
-- Uses exactly the same shell and visual identity as Universe Home.
+The World Map is the **current** primary structure navigation surface. It uses the same shell and visual identity as Universe Home.
+
+**Open — Decision 6:** whether outline/tree becomes the canonical primary interface and graph becomes a secondary lens for relations, dependencies, and impact is **not yet approved**. Do not treat the World Map's current centrality as a permanent product decision.
+
+Implemented behavior today:
 - Primary hierarchy flows from top to bottom.
 - Root node is visually prominent.
 - Main branches are more prominent than child nodes.
@@ -134,20 +142,20 @@ Available when a pending proposal exists. Replaces the current pending proposal 
 
 Available only on a pending proposal. Approve creates topic nodes on the World Map atomically. Reject marks the proposal rejected. Both require explicit user action.
 
-## Non-root Planning Chat (Stage E — planned, not implemented)
+## Non-root Planning Chat (Stage E — implemented)
 
-Topic Nodes will open their own Planning chat at `/worlds/[worldId]/nodes/[nodeId]`.
+Topic Nodes open their own Planning chat at `/worlds/[worldId]/nodes/[nodeId]` (dispatched by node kind).
 
-**Planned behaviour:**
+**Implemented behaviour:**
 
 - Root Planning remains visually and behaviourally distinct from Topic Node Planning.
 - Each Topic Node has one persistent Planning conversation.
 - Message history loads chronologically and survives refresh and reopen.
 - Ancestor-path context is injected into model input but **not** presented as editable messages in the timeline.
 - No structure proposal cards, Generate World Structure, or branch-suggestion flow in non-root Planning.
-- Streaming, composer, and safe error handling follow Root Planning patterns.
+- Streaming, composer, safe error handling, and HTTP 409 conflict handling follow Root Planning patterns (Stage E.1).
 
-Do not implement relation UI or relation context in Stage E.
+Relation UI and relation context injection remain out of scope until Stage F (blocked until UI redesign is accepted).
 
 ## Secondary Relations (Stage F+ — planned, not implemented)
 
@@ -218,3 +226,68 @@ Two explicit analysis modes (both user-triggered; neither runs automatically dur
 - Secondary relations may be hidden by type.
 - Focus Mode shows the selected node, its ancestors, children and directly linked nodes.
 - AI-proposed structural changes require explicit user approval before application; all structural changes use validated atomic server operations.
+
+## Product/UX v2 — approved UX principles (not yet implemented)
+
+The following are **approved direction** for the UI redesign. Exact layouts are not designed yet. See `docs/PRODUCT_UX_V2.md` for full detail.
+
+### Legibility and structure
+
+- The Project must remain readable independently of AI chat.
+- Structure grows progressively — smallest useful macro structure first; do not invent depth prematurely.
+- The canonical **hierarchical project structure** (project hierarchy as project truth) represents justified structure. Delegated areas remain visible; presentation may collapse or quiet them. This structural invariant does not settle Decision 6: the primary UI representation of the hierarchy (Tree/Outline vs Graph role) remains open.
+- If a focus view hides AI-managed branches, show awareness (e.g. "4 AI-managed areas hidden").
+
+### Inspection versus involvement
+
+> Looking is free. Being brought in is a request.
+
+- Opening, expanding, or inspecting a Node **never** changes involvement or policy.
+- Repeated inspection may eventually suggest involvement change — never apply it automatically.
+
+### Involvement — happy path (no level selectors)
+
+Do **not** require autonomy wizards, level selectors, or involvement presets in the normal workflow.
+
+**Standing / overlay vocabulary:**
+
+- `AI handling` — label on delegated areas
+- *(no label)* — normal involved state (default)
+- `Needs you` — temporary overlay when user action is required
+
+**Contextual actions:** `Involve me more` · `Handle this for me` — intent inputs compiled into specific policy with user confirmation.
+
+Increasing involvement on request is always safe. Decreasing involvement / increasing AI authority requires explicit confirmation.
+
+### "What I handle here" — read-first policy mirror
+
+Power-user surface showing **effective policy** per Node (domain-appropriate categories, human-readable origins, non-editable floor rows). Editing is secondary. Not part of the happy path. Same underlying policy as natural-language compilation — no parallel settings store.
+
+### Attention surfaces
+
+Conceptual separation (not yet implemented):
+
+- **Your work** — Human / Hybrid Tasks assigned to the user only
+- **Needs your decision** — Attention queue (single system)
+- **AI working** — compact status (e.g. "N AI tasks running · M blocked"), not a giant peer task list
+
+Increasing involvement does **not** convert AI Tasks into user Tasks.
+
+### Explanation depth
+
+Adaptive by default via `Show more` / `Show less` on summaries (sticky per node). No detail-level selector in the happy path. Power users may override explanation style in "What I handle here."
+
+### Task execution UI (future)
+
+No full persistent Chat per Task by default. Support **Watch**, **Stop**, **Steer** (steer is an input event, not a conversation). Meaningful blockers escalate to Planning / Needs-you as translated issues — not raw agent errors.
+
+### FOMO and calm transparency
+
+- Do not use repetitive "nothing needs your attention" reassurance.
+- Absence of `Needs you` is the quiet signal.
+- Tree decision counts are a UX experiment — not locked copy.
+- No timer-based reassurance. User-requested digests may be considered later.
+
+### Visual design
+
+Actual UI redesign, final branding, and light/dark priority remain **pending**. Do not invent final screen layouts in implementation without an approved UI redesign plan.

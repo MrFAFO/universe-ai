@@ -2,7 +2,19 @@
 
 ## Product
 
-Universe AI replaces long, flat AI conversations with organized project worlds.
+Universe AI is an **AI-native project management and execution workspace** that makes complex projects clear, accessible, editable, and understandable — including for users who are not experts in the project's domain.
+
+It combines:
+
+1. **Project Workspace** — a legible project system (structure, planning, Tasks, Decisions, Files / Artifacts, status, progress, dependencies, history, attention) usable independently of AI chat
+2. **Project Intelligence** — persistent AI that understands, plans, advises, explains, monitors, and coordinates
+3. **Execution** — work performed by AI, humans, or hybrid collaboration
+
+The conceptual lifecycle is: Idea → Understand → Structure → Plan → Decide → Tasks → Execute → Track → Learn / Adapt. This is a product model, not an implemented state machine.
+
+**Approved Product/UX direction:** see `docs/PRODUCT_UX_V2.md` for the full v2 baseline, involvement model, and open decisions.
+
+**Current implementation terminology:** the codebase still uses Universe / World / Root / Topic node naming. Future terminology and branding remain **open** — do not rename schema or routes without explicit approval.
 
 ## Core principle
 
@@ -15,13 +27,17 @@ The AI may suggest structure, ask questions, and recommend actions. It must neve
 - Existing conversations, progress, decisions, and completed or relevant work must not be silently deleted or blindly replaced.
 - Proposed state must remain separate from approved World state.
 - Prefer simple incremental implementation over speculative abstractions.
+- **Chat is a place to think.** Approved structured project state is durable project truth. Chat text does not automatically become project truth.
+- **AI autonomy must never make the Project progressively less legible to its owner.**
+
+**Structural changes (current implementation invariant):** AI-generated structural changes still require reviewed proposal, explicit user approval, and validated atomic server/database application. Autonomous structural expansion is **deferred** — see `docs/PRODUCT_UX_V2.md`.
 
 ## Core Structure
 
 - **Universe:** the global home page.
 - **World:** a project or long-running subject.
 - **Root node:** planning only; hosts the Root Planning conversation for forming or reconciling World structure.
-- **Topic nodes:** non-root nodes in the hierarchy; each will have its own Planning conversation (Stage E) and later Execution contexts.
+- **Topic nodes:** non-root nodes in the hierarchy; each has its own Planning conversation (Stage E — implemented). Future Tasks and execution attach to work areas; execution is **not** modelled as a separate conversation type in the approved Product/UX v2 direction.
 - Every non-root node has exactly one hierarchical parent (`nodes.parent_id`).
 - The hierarchy represents decomposition and ownership of work.
 - Secondary relations must not become an alternative hierarchy.
@@ -30,13 +46,14 @@ The AI may suggest structure, ask questions, and recommend actions. It must neve
 - Secondary links transfer relevant structured context, not entire conversations.
 - Full history is stored; only a focused context package is sent to the AI.
 
-## Conversation types
+## Conversation types (current implementation)
 
 | Type | Node | Purpose | Status |
 |---|---|---|---|
 | Root Planning | Root | Form or reconcile World structure | Implemented (Stage D) |
-| Planning | Topic Node | Plan work within a branch | Stage E (next) |
-| Execution | Any work node | Carry out approved work | Future |
+| Planning | Topic Node | Plan work within a branch | Implemented (Stage E) |
+
+**Approved future direction (not implemented):** Tasks and inspectable execution surfaces — not a third "Execution conversation" per node. Generalized Run entity model remains to be designed. See `docs/PRODUCT_UX_V2.md`.
 
 ## Root Planning AI
 
@@ -71,17 +88,15 @@ Regenerating replaces the pending proposal; the previous one is marked supersede
 
 After initial topic nodes exist, Generate World Structure must not create or approve another initial structure. Server and database validation must enforce this. The future action for a structured World is **Update Existing Structure** — modifying an already-approved structure while preserving node identity and attached work — which is Structure Reconciliation (Stage I).
 
-## Why non-root Planning is next
+## Progressive structure — approved product principle
 
-Stage D created the initial topic-node structure, but only Root Planning is a real workspace today. Topic Nodes exist on the map without their own Planning conversations.
+> The Project Tree grows with understanding. It should not be deeper or more detailed than current project knowledge justifies.
 
-Non-root Planning is the immediate next capability because:
+Initial structure should be the smallest useful macro structure based on information established during Discovery / Planning. Once an area is known to be a real part of the Project, it must not disappear merely because the user has delegated that area to AI. Presentation may collapse or quiet delegated branches; canonical structure remains accurate.
 
-- It makes each Topic Node a real planning workspace, not just a map label.
-- It produces the persistent Planning content that later relation detection, context transfer, and reconciliation depend on.
-- It can reuse proven streaming and persistence infrastructure without prematurely introducing relations or reconciliation complexity.
+**Stage E (Non-root Planning) — implemented:** each Topic Node is a real planning workspace with persistent Planning chat. This produces the node-level Planning content that later relation detection, context transfer, and reconciliation depend on.
 
-Relations and reconciliation should follow real node-level Planning content where precision matters. **Initial** relation analysis (Stage G) may use Root Planning content and node metadata without completed Topic Planning conversations; **deep** analysis requires meaningful Topic Planning content. Relation **implementation** (Stage F) still follows Stage E.
+Relations and reconciliation should follow real node-level Planning content where precision matters. **Initial** relation analysis (Stage G) may use Root Planning content and node metadata without completed Topic Planning conversations; **deep** analysis requires meaningful Topic Planning content. Relation **implementation** (Stage F) follows Stage E but remains **blocked** until the UI redesign milestone is completed and accepted.
 
 ## Cross-domain support
 
@@ -190,32 +205,36 @@ AI may propose relations only after explicit user action (Stage G). Proposals re
 
 Relations should be archived rather than silently hard-deleted when no longer valid.
 
-## Product Purpose
+## Product purpose
 
-Traditional AI chats become difficult to navigate as conversations grow. Important decisions, context and outputs become buried inside a long linear history.
+Traditional AI chats become difficult to navigate as conversations grow. Important decisions, context, and outputs become buried inside a long linear history.
 
-Universe AI turns a complex AI conversation into a structured visual project.
+Universe AI makes the project **readable** — structure, decisions, work, and outputs remain visible and manageable without repeatedly asking AI what exists, where things stand, or what was decided.
 
-A user begins with a planning conversation at the root of a World. When the subject expands, the AI suggests splitting it into focused child nodes. Each node receives only the relevant summarized context, binding decisions and connected project information it needs.
+A user begins with planning at the root of a World. When the subject expands, the AI proposes splitting it into focused child nodes. Each node receives only the relevant summarized context, binding decisions, and connected project information it needs.
 
 The product combines:
 
-- AI conversation
+- AI conversation and Project Intelligence
 - Hierarchical project structure
-- Visual knowledge navigation
+- Visual project navigation
 - Focused context management
-- Planning and execution workspaces
-- Structured decisions, progress and project memory
+- Planning and future execution workspaces
+- Structured Decisions, Tasks, progress, and project memory (approved future entities — see `docs/PRODUCT_UX_V2.md`)
 
-The core promise is:
+**Durable context principle:**
 
 > Keep the full history, but expose and send only the information that is relevant to the current task.
 
-The World Map is therefore not decorative. It is the primary interface for understanding the project, navigating its knowledge and controlling which context each AI workspace receives.
+**Structure visualization — open (Decision 6):** the World Map exists today as hierarchy and relation graph views. Whether outline/tree becomes the canonical primary interface and graph becomes a secondary lens is **not yet formally approved**. See `docs/PRODUCT_UX_V2.md` — Decision 6.
 
 ## Current implementation status
 
-Stages A–D are complete and merged into `main` at commit `95e09f6`. Stage E (Non-root Planning) is the immediate next implementation stage. See `docs/CURRENT_STATE.md` for exact progress and the approved post-D roadmap.
+Stages A–E.1 are **implemented and manually accepted** on branch `stage-e1-planning-chat-concurrency-hardening` (Stage E.1 acceptance at `b7eb057`). Stages A–D are merged into `main` at commit `95e09f6`.
+
+**Current gate:** Product/UX Architecture v2 — interim documentation baseline (Product/UX work **not complete**). **Next product-owner decision:** Decision 6. Sequence: remaining Product/UX decisions → final Product/UX approval → UI redesign → later implementation. **Stage F must not start yet.**
+
+See `docs/CURRENT_STATE.md` for exact progress. See `docs/PRODUCT_UX_V2.md` for approved product direction and open decisions.
 
 Technical architecture is defined in `docs/ARCHITECTURE.md`.
 
@@ -233,4 +252,4 @@ Technical architecture is defined in `docs/ARCHITECTURE.md`.
 
 - `/` — Universe Home
 - `/worlds/[worldId]` — World Map
-- `/worlds/[worldId]/nodes/[nodeId]` — Planning Chat (Root node today; Topic Nodes in Stage E)
+- `/worlds/[worldId]/nodes/[nodeId]` — Planning Chat (Root or Topic; dispatched by node kind — Stage E)

@@ -1,6 +1,6 @@
 ﻿# Universe AI — Current State
 
-Primary handoff document for developers and AI agents. For durable technical architecture see `docs/ARCHITECTURE.md`. For product context see `docs/PROJECT.md`.
+Primary handoff document for developers and AI agents. For durable technical architecture see `docs/ARCHITECTURE.md`. For product context see `docs/PROJECT.md`. For approved Product/UX v2 baseline see `docs/PRODUCT_UX_V2.md`.
 
 ---
 
@@ -8,17 +8,18 @@ Primary handoff document for developers and AI agents. For durable technical arc
 
 A new developer or AI conversation should start here without relying on prior chat history.
 
-1. **Read** `AGENTS.md`, `docs/PROJECT.md`, `docs/ARCHITECTURE.md`, `docs/UI.md`, and this file.
+1. **Read** `AGENTS.md`, `docs/PROJECT.md`, `docs/PRODUCT_UX_V2.md`, `docs/ARCHITECTURE.md`, `docs/UI.md`, and this file.
 2. **Verify Git state** before changing code:
    - `git status -sb`
    - `git branch --show-current`
    - `git log --oneline --decorate --max-count=5`
 3. **Confirm** you are on `stage-e1-planning-chat-concurrency-hardening` (or a descendant branch for follow-on work).
-4. **Do not start relation implementation.** Relations are Stage F and later. **Stage F must not begin before the UI redesign milestone is completed and accepted.**
-5. **Stage E.1 — Planning Chat Concurrency Hardening is complete and manually accepted** on this branch.
-6. **Preserve all Stage D invariants** (see `docs/ARCHITECTURE.md` — Stage D boundary). Root Planning behaviour must not regress.
-7. **Approved sequence:** Stage E → Stage E.1 → **UI redesign gate** → Stage F.
-8. **Next work is the UI redesign milestone** (product-owner gate between E.1 and F). Do not start Stage F until that milestone is completed and accepted.
+4. **Stage E and Stage E.1 are complete and manually accepted.** Do not regress Root/Topic Planning or E.1 concurrency invariants.
+5. **Current gate:** Product/UX Architecture v2 — **interim documentation baseline** (this checkpoint records partial progress; Product/UX work is **not complete**). **Next product-owner step:** **Decision 6** (Tree/Outline vs Graph). Remaining Product/UX decisions → final Product/UX approval → UI redesign → later implementation. **Do not start UI redesign yet.**
+6. **Do not start Stage F** (Relations) until the UI redesign milestone is completed and accepted (after final Product/UX approval).
+7. **Do not implement** future Decision, Task, policy-engine, or autonomy architecture until explicitly planned and approved (Decision and Task are approved future concepts — not implemented; Files/Artifacts entity semantics remain open).
+8. **Preserve** structural proposal/approval invariant and Stage D/E/E.1 technical boundaries.
+9. **Roadmap reorder** (Decisions/Tasks before Relations UI) is **pending** approval — the documented F–I sequence in this file remains authoritative until resolved. See `docs/PRODUCT_UX_V2.md`.
 
 ---
 
@@ -27,24 +28,60 @@ A new developer or AI conversation should start here without relying on prior ch
 | Item | Value |
 |---|---|
 | **Completed stage** | Stage E.1 — Planning Chat Concurrency Hardening |
-| **Acceptance** | Manually accepted |
+| **Acceptance** | Manually accepted at `b7eb057` — `docs: record stage e1 acceptance` |
 | **Merged into `main`** | No — implementation on working branch |
 | **`main` / `origin/main`** | Both at `95e09f6` (verified at Stage E acceptance) |
 | **Stage E accepted baseline** | `e282d69` — docs: record stage e acceptance |
 | **Stage E.1 implementation commits** | `99d6644` database layer · `31d698f` API conflict mapping · `4318870` client conflict handling · `db9198c` activation and fenced completion |
 | **Prior completed stage** | Stage E — Non-root Planning (`e282d69`, manually accepted on this branch) |
 | **Current working branch** | `stage-e1-planning-chat-concurrency-hardening` |
-| **Stage E.1 implementation tip** | `db9198c` — activation and fenced completion |
-| **Immediate next milestone** | **UI redesign gate** (not Stage F) |
+| **Stage E.1 acceptance commit** | `b7eb057` |
+| **Current checkpoint** | **Product/UX Architecture v2** — interim documentation baseline (not final Product/UX approval) |
+| **Next product-owner decision** | **Decision 6** — canonical Tree/Outline vs Graph role |
+| **Later gates (not started)** | Remaining Product/UX decisions → final Product/UX approval → **UI redesign** → Stage F (blocked) |
 
 ---
 
 ## Immediate Next Task
 
-1. **UI redesign milestone** — the product-owner gate between accepted Stage E.1 and Stage F. Detailed scope is not defined in this document; see `docs/UI.md` for visual direction where applicable.
-2. **Do not start Stage F** until the UI redesign milestone is completed and accepted.
-3. **No relation code yet.** Do not add `node_relations` writes, relation UI, or relation context injection before Stage F.
-4. **Preserve Stage E.1 Planning concurrency invariants** (see `docs/ARCHITECTURE.md` — Planning Chat Concurrency).
+1. **Product/UX Architecture v2 — interim baseline** — this documentation checkpoint records approved direction so far in `docs/PRODUCT_UX_V2.md`. Product/UX architecture work is **not complete**.
+2. **Next product-owner decision:** **Decision 6** — canonical Tree/Outline vs Graph role (`docs/PRODUCT_UX_V2.md`).
+3. **Then:** remaining Product/UX decisions → **final Product/UX approval** → UI redesign milestone → later implementation. **Do not start UI redesign** until final Product/UX approval.
+4. **Do not start Stage F** until the UI redesign milestone is completed and accepted.
+5. **No relation code yet.** Do not add `node_relations` writes, relation UI, or relation context injection before Stage F.
+6. **Preserve Stage E.1 Planning concurrency invariants** (see `docs/ARCHITECTURE.md` — Planning Chat Concurrency).
+
+---
+
+## Product/UX Architecture v2 — interim documentation checkpoint
+
+**Status:** Interim Product/UX baseline recorded in `docs/PRODUCT_UX_V2.md` (documentation only — no code, schema, or migration changes). This is **not** final Product/UX architecture approval.
+
+**Approved so far at this checkpoint (product direction, not implementation):**
+
+- AI-native project management and execution workspace product category
+- Project legibility as core value; chat is not automatic project truth
+- Progressive structure; delegated areas remain in canonical tree
+- Decision involvement as the only configurable policy axis; visibility is view state; Task executor is Task property
+- Three interaction outcomes: Act + Event, Act + Decision, Ask
+- Deterministic authority floor; no unattributable autonomy
+- Working Agreement compiled to structured versioned policy
+- Happy-path vocabulary: `AI handling`, `Needs you`, `Involve me more`, `Handle this for me`
+- "What I handle here" read-first policy mirror for power users
+- Tasks (Human/AI/Hybrid) and Decisions — approved first-class future concepts (not implemented)
+- Files / Artifacts as Project Workspace concept; provenance/recovery as hard future requirement
+- Structural proposal/approval invariant **unchanged** in current implementation
+
+**Open product-owner decisions (not approved in this checkpoint):**
+
+- **Decision 6:** canonical Tree/Outline vs Graph role — **next product-owner decision**
+- Terminology / rebrand (Universe, World, Root, etc.)
+- Roadmap reorder (relative priority of Decisions, Tasks, Files/Artifacts vs Relations UI — recommended, not approved)
+- Files/Artifacts first-class entity semantics and execution Run model (to be designed)
+- Validation domain for first non-software dogfood
+- Final UI layouts and visual design
+
+**Gate sequence (not started until noted):** remaining Product/UX decisions → **final Product/UX approval** → UI redesign → later implementation (Stage F remains blocked).
 
 ---
 
@@ -100,7 +137,7 @@ Stage E.1 hardened Planning chat concurrency for **both Root and Topic Planning*
 
 **Explicitly excluded from Stage E.1 (not delivered):**
 
-- Relations, Execution, Structure Reconciliation
+- Relations, future Task/execution surfaces, Structure Reconciliation
 - Changes to Branch Suggestion acquisition or `generate-and-persist-branch-suggestion` behaviour
 - UI redesign
 - New dependencies
@@ -125,7 +162,7 @@ Stage E made every Topic Node a persistent Planning workspace while keeping Root
 
 **Explicitly excluded from Stage E (not delivered):**
 
-- Execution conversations
+- Task / execution product surfaces (approved future direction — not execution conversations)
 - Automatic relation detection, manual relation editing, or relation context injection
 - Structure Reconciliation, Update Existing Structure, relation impact propagation
 - Full Context Engine, authentication
@@ -139,13 +176,16 @@ Stage E documented concurrent-send behaviour before E.1. Stage E.1 now enforces 
 
 ## Approved Post-Stage-E Roadmap
 
-Ordered stages. Do not skip ahead.
+Ordered stages. Do not skip ahead. **Note:** a recommended reorder (Decisions/Tasks/Artifacts before Relations) is documented in `docs/PRODUCT_UX_V2.md` but **not formally approved** — the sequence below remains authoritative until product-owner approval.
 
 | Stage | Name | Status |
 |---|---|---|
 | **E** | Non-root Planning | **Complete — manually accepted** (`e282d69`) |
-| **E.1** | Planning Chat Concurrency Hardening | **Complete — manually accepted** (`db9198c`) |
-| **UI redesign** | UI redesign gate | **Next — not started** (product-owner gate before Stage F) |
+| **E.1** | Planning Chat Concurrency Hardening | **Complete — manually accepted** (`b7eb057`) |
+| **Product/UX v2** | Product/UX architecture (interim baseline) | **In progress** — this documentation checkpoint |
+| **—** | Decision 6 and remaining Product/UX decisions | **Next product work** — not implementation |
+| **—** | Final Product/UX approval | **Not started** |
+| **UI redesign** | UI redesign gate | **Not started** — after final Product/UX approval; before Stage F |
 | **F** | Secondary Relations MVP | Approved, not implemented (do not start before UI redesign) |
 | **G** | AI Relation Proposals | Approved, not implemented |
 | **H** | Impact Review | Approved, not implemented |
@@ -330,7 +370,7 @@ Stage D delivered structured initial World structure proposals through Root Plan
 - Root Planning continuing to behave exactly as before
 - Concurrent sends from two tabs on the same Topic conversation (documents the pre-E.1 limitation; resolved by Stage E.1)
 
-### Stage E.1 completion (implementation through `db9198c`, manually accepted on `stage-e1-planning-chat-concurrency-hardening`)
+### Stage E.1 completion (implementation through `db9198c`, manually accepted at `b7eb057` on `stage-e1-planning-chat-concurrency-hardening`)
 
 **Automated (C4 activation validation):**
 
@@ -419,12 +459,14 @@ Acquisition-before-persist Planning chat runs; fenced atomic completion; HTTP 40
 
 ## Not Yet Implemented
 
-- UI redesign milestone (gate before Stage F)
-- Relation create/edit/archive (Stage F)
+- Decision and Task as first-class future concepts; Working Agreement / policy engine (approved direction only — not implemented)
+- Files/Artifacts surface concept and provenance requirement (entity semantics not yet formally approved)
+- Inspectable execution state for future AI work (Run entity model not yet formally approved)
+- Final Product/UX approval and UI redesign milestone implementation
+- Relation create/edit/archive (Stage F — blocked until UI redesign accepted)
 - AI relation proposals (Stage G)
 - Relation impact review (Stage H)
 - Structure Reconciliation and Update Existing Structure (Stage I)
-- Execution conversations
 - Authentication
 - Full Context Engine
 - `nodes.archived_at`, `worlds.structure_revision` (deferred to reconciliation work)
@@ -432,6 +474,15 @@ Acquisition-before-persist Planning chat runs; fenced atomic completion; HTTP 40
 ---
 
 ## Open Product Decisions
+
+### Product/UX v2 (see `docs/PRODUCT_UX_V2.md`)
+
+- **Decision 6:** canonical Tree/Outline vs Graph as primary structure interface — **next product-owner decision**
+- Terminology and branding (Universe / World / Root / Project)
+- Roadmap reorder: relative priority of Decisions, Tasks, Files/Artifacts vs Relations UI (recommended, not approved)
+- Files/Artifacts first-class entity semantics; execution Run model (open — to be designed)
+- Validation domain for cross-domain stress-testing
+- Autonomous structural decomposition inside delegated subtrees (deferred)
 
 ### Stage G (require approval before implementation)
 

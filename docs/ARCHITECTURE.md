@@ -1,8 +1,8 @@
 # Universe AI — Architecture
 
-Durable technical architecture for Stage D and beyond. For product context see `docs/PROJECT.md`. For UI behavior see `docs/UI.md`. For implementation progress and the **Resume Here** handoff see `docs/CURRENT_STATE.md`.
+Durable technical architecture for Stage D and beyond. For product context see `docs/PROJECT.md`. For approved Product/UX v2 direction see `docs/PRODUCT_UX_V2.md`. For UI behavior see `docs/UI.md`. For implementation progress and the **Resume Here** handoff see `docs/CURRENT_STATE.md`.
 
-**Post-Stage-D status:** Stage D is **implemented** and merged into `main` at `95e09f6`. Stage E (Non-root Planning) and Stage E.1 (Planning Chat Concurrency Hardening) are **implemented and manually accepted** on branch `stage-e1-planning-chat-concurrency-hardening`. The **immediate next implementation milestone** is the **UI redesign gate**, then Stage F. Stages F–I are **approved but not implemented**.
+**Post-Stage-E.1 status:** Stages E and E.1 are **implemented and manually accepted** on branch `stage-e1-planning-chat-concurrency-hardening` (acceptance `b7eb057`). The **current gate** is **Product/UX Architecture v2** (interim documentation baseline — work not complete). **Next product-owner decision:** Decision 6. **Stage F is not started** and remains blocked until after final Product/UX approval and the UI redesign milestone. Stages F–I remain **approved but not implemented**; the documented F–I sequence is authoritative until a pending roadmap-reorder decision is resolved (see `docs/PRODUCT_UX_V2.md`).
 
 ---
 
@@ -46,20 +46,37 @@ Structural change rules:
 |---|---|---|
 | **E** | Non-root Planning | **Implemented** — manually accepted |
 | **E.1** | Planning Chat Concurrency Hardening | **Implemented** — manually accepted |
-| **UI redesign** | UI redesign gate | **Next** — not started (before Stage F) |
+| **Product/UX v2** | Product/UX architecture decisions | **In progress** — interim baseline checkpoint |
+| **UI redesign** | UI redesign gate | **Not started** — after final Product/UX approval; before Stage F |
 | **F** | Secondary Relations MVP | Approved — not implemented |
 | **G** | AI Relation Proposals | Approved — not implemented |
 | **H** | Impact Review | Approved — not implemented |
 | **I** | Structure Reconciliation | Approved — not implemented |
 
+**Approved future concepts (not implemented):**
+
+- **Decision** — approved first-class future concept
+- **Task** — approved first-class future concept; executor is Human, AI, or Hybrid
+- **Policy engine / Working Agreement** — approved future architecture direction
+- **Event** (routine execution history) — approved conceptual distinction from Decision; detailed model TBD
+
+**Superseded / not the approved future model:**
+
+- **Execution as a separate conversation type** — not the approved future product model. Approved direction: Tasks plus inspectable execution state / surfaces.
+
+**Approved workspace concepts (entity design open):**
+
+- **Files / Artifacts** — part of the approved Project Workspace concept; first-class entity, versioning, and detailed semantics **not yet formally approved**
+- **Inspectable execution runs** — conceptual requirement for future AI execution; generalized Run entity model **not yet formally approved**
+
 **Deferred indefinitely or until later stages:**
 
-- Execution conversations
 - Full Context Engine
 - SPLIT / MERGE
 - `conversation_events` table
 - Generate with Assumptions (optional; deliberately deferred from Stage D)
-- First-class Contract or Shared Artifact entity
+- First-class Contract entity (legacy deferred item)
+- Autonomous structural decomposition inside delegated subtrees
 
 ---
 
@@ -545,7 +562,7 @@ Accepted at `e282d69` on branch `stage-e-non-root-planning`. See `docs/CURRENT_S
 
 **Explicitly out of scope:**
 
-- Execution conversations
+- Task / execution product surfaces (approved future direction: Tasks plus inspectable execution state/surfaces — not execution conversations)
 - Relation detection, creation, editing, or context injection
 - Structure Reconciliation and Update Existing Structure
 - Full Context Engine
@@ -842,9 +859,9 @@ Exact commit grouping may be adjusted. Stage order must be preserved.
 4. Client conflict handling (Root and Topic).
 5. Activate acquisition-before-persist and fenced completion in shared stream core.
 
-### UI redesign gate (next)
+### UI redesign gate (after final Product/UX v2 approval)
 
-Product-owner milestone between E.1 and Stage F. Detailed scope is not specified in this architecture document.
+Product-owner milestone after **final Product/UX architecture approval** and before Stage F. Not started. Detailed scope is not specified in this architecture document.
 
 ### Stage F — Secondary Relations MVP
 
@@ -897,12 +914,85 @@ Two explicit analysis modes (both user-triggered; neither runs automatically dur
 
 ---
 
+## Product/UX v2 — future architecture principles (approved direction; not implemented)
+
+This section records **approved future requirements** from the Product/UX v2 baseline (`docs/PRODUCT_UX_V2.md`). Nothing here is implemented in the current codebase unless explicitly stated elsewhere in this document.
+
+**Do not** create final schemas, migrations, or product code from this section without an explicit implementation plan and product-owner approval.
+
+### Future product concepts / status (approved direction; not implemented)
+
+| Concept | Status |
+|---|---|
+| **Decision** | Approved first-class future concept — meaningful choice/constraint that guides work; supersession instead of silent mutation |
+| **Task** | Approved first-class future concept — unit of work; executor is Human, AI, or Hybrid (Task property, not Node policy) |
+| **Event** | Approved conceptual distinction — routine execution history, not a Decision; detailed model TBD |
+| **Policy engine / Working Agreement** | Approved future architecture direction — structured, versioned, attributable policy |
+| **Files / Artifacts** | Approved Project Workspace concept — dedicated surface with context; **first-class entity, versioning, and detailed semantics not yet formally approved** |
+| **Inspectable execution state** | Approved conceptual requirement for future AI execution — **generalized Run entity model not yet formally approved** |
+| **Execution as conversation type** | **Superseded** — not the approved future product model |
+
+Chat remains non-binding thinking. Approved structured state is project truth.
+
+### Decision delegation — three internal outcomes (approved)
+
+1. **Act + Event** — routine work within authority; no interruption
+2. **Act + Decision** — meaningful delegated choice recorded as durable Decision; no approval interruption
+3. **Ask** — user involvement required; work may become blocked-pending-input
+
+Not approved: "proceed unless objected" as async governance. Model judgment may escalate involvement; it must not weaken the deterministic floor. No numeric LLM confidence for authority.
+
+### Structured policy engine (approved direction; not implemented)
+
+- Natural-language Working Agreement and user instructions are **input/presentation**
+- Confirmed authority is **structured, versioned policy** with attribution — not prompt prose alone
+- Scopes: User defaults → Project Working Agreement → Node policy (toward descendants) → deterministic floor
+- **Explicit user policy beats inferred policy.** Adaptation operates only where the user has remained silent
+- Policy changes never alter structure, dependencies, Task ownership, or approved Decisions
+- Monotone subtree application: broader "involve me more" must not reduce a child's more-involving override
+- The AI must never widen its own authority without user confirmation
+
+### Involvement architecture (approved)
+
+Only **decision involvement** is configurable policy. **Visibility** is view state (expand/collapse, show more/less, explanation style) — inspection has no governance effect. **Execution ownership** is a Task property.
+
+### Deterministic authority floor (approved)
+
+Hard gates enforced at capability/server/tool layer where possible — not by model judgment alone. Includes: spending beyond authorization, consequential outbound communication, irreversible user-owned state changes, legal commitments, cross-project leakage, acting against approved Decisions, widening AI authority, production/exposure changes, structural writes outside validated operations.
+
+### Workspace User Working Model (approved direction)
+
+Workspace-level preferences may seed Project Working Agreements. **Project content does not flow across Projects.** Project policy overrides user defaults.
+
+### Dependency boundary contracts (approved)
+
+Delegation boundaries behave like contracts: internal decisions stay internal; relevant outputs cross. Escalation follows the most involving affected policy, deduplicated. Blocked Tasks remain visible when Attention items are dismissed.
+
+### Provenance and recovery (approved hard requirement; not implemented)
+
+Delegated Decisions must record what they affected. Future work outputs and Tasks must support recorded provenance (which Decisions they depended on) — exact entity model for Files/Artifacts TBD. Recovery must use recorded provenance — not LLM reconstruction of impact.
+
+### Structural authority — current invariant unchanged
+
+AI structural changes still require proposal, explicit approval, and validated atomic apply. **Autonomous structural decomposition inside delegated subtrees is deferred.** A future boundary may distinguish decomposing an approved parent goal from extending project scope — not approved now.
+
+### Roadmap note — reorder pending
+
+A prior review recommended implementing Decisions and Tasks (and Files/Artifacts work) before Relations UI. This is **not formally approved** as the new sequence. The table in Post-D roadmap above remains until product-owner approval. See `docs/PRODUCT_UX_V2.md` — Open decisions.
+
+### Visualization — Decision 6 open
+
+Whether outline/tree is canonical and graph is a secondary lens is **not approved**. Current World Map implementation is not a permanent architecture commitment.
+
+---
+
 ## Documentation map
 
 | File | Contains |
 |---|---|
 | `AGENTS.md` | Agent workflow rules; pointer here; structural-change hard rule |
+| `docs/PRODUCT_UX_V2.md` | Approved Product/UX v2 baseline and open decisions |
 | `docs/PROJECT.md` | Product truth, glossary, cross-domain requirement |
-| `docs/UI.md` | Visual identity, timeline placement, proposal card states |
+| `docs/UI.md` | Visual identity, timeline placement, proposal card states, UX principles |
 | `docs/ARCHITECTURE.md` | This file — durable technical architecture |
 | `docs/CURRENT_STATE.md` | Primary handoff — current stage, Resume Here, roadmap |
