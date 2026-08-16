@@ -12,6 +12,20 @@ It combines:
 
 The conceptual lifecycle is: Idea → Understand → Structure → Plan → Decide → Tasks → Execute → Track → Learn / Adapt. This is a product model, not an implemented state machine.
 
+## Product thesis — north star
+
+Universe AI enables a person to create and manage a complex project with AI **without losing understanding, access, or control** — maintaining a living, understandable model of the Project as AI performs more of the work.
+
+> AI may handle complexity, but must never hide the project from its owner.
+
+Full thesis, control principle, validation questions, and relationship to Product/UX v2: see `docs/PRODUCT_UX_V2.md` — Product thesis — refined north star.
+
+## Initial validation focus — hypothesis
+
+**Software-first** initial product experience and go-to-market: AI-assisted software / digital product creation for builders who can ship with AI tools but do not comfortably understand or control the entire resulting system (founders, product-oriented builders, vibe coders, semi-technical builders — **exact ICP not validated**).
+
+Core architecture remains **domain-neutral**; software-first is a wedge, not a permanent product restriction.
+
 **Approved Product/UX direction:** see `docs/PRODUCT_UX_V2.md` for the full v2 baseline, involvement model, and open decisions.
 
 **Current implementation terminology:** the codebase still uses Universe / World / Root / Topic node naming. Future terminology and branding remain **open** — do not rename schema or routes without explicit approval.

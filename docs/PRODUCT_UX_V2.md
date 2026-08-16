@@ -21,6 +21,88 @@ For current implementation status see `docs/CURRENT_STATE.md`. For durable techn
 
 ---
 
+## Product thesis — refined north star
+
+**Status:** Approved product direction (refinement recorded after competitive/product analysis). This strengthens — does not invalidate — the interim Product/UX v2 baseline below.
+
+Universe AI should enable a person to create and manage a complex project with AI **without losing understanding, access, or control**.
+
+The user should remain capable of understanding what exists, why it exists, its current state, what decisions shaped it, what remains incomplete, what it depends on, what may be affected by changes, and what should happen next — even when the user is not an expert in the project's domain.
+
+**Durable principles:**
+
+> AI may handle complexity, but must never hide the project from its owner.
+
+> Simplify the representation, never hide the underlying truth.
+
+The same underlying Project truth may be presented at progressively deeper levels of detail according to the user's expertise and current need — for example: simple explanation → more detail → domain/technical detail → underlying implementation / artifacts. This is **presentation depth**, not different project truth.
+
+### Control — not a spectator product
+
+Universe AI is not intended to reduce the user to a spectator while AI controls an opaque project. The user should be able to inspect, add, remove, edit, redirect, and understand meaningful Project elements through concepts they can understand.
+
+Where implementation requires expertise the user does not possess, AI may translate user intent into lower-level implementation work — subject to the already-approved authority, decision, structural-change, and safety boundaries.
+
+Conceptual example (not software-specific core schema): the user expresses *"Allow Google login"* without manually finding and editing every relevant file; the system explains meaningful impact, affected areas, and resulting state while AI may handle authorized technical implementation.
+
+### Initial validation focus — hypothesis
+
+**Approved direction:** software-first initial product experience and validation focus.
+
+**Hypothesis — not validated:** the initial wedge is **AI-assisted software / digital product creation**, especially for people who can build with coding agents or AI builders but do not comfortably understand or control the entire resulting system.
+
+Candidate early users (hypothesis only — exact ICP not validated): founders, product-oriented builders, vibe coders, junior / semi-technical builders.
+
+**Problem hypothesis:** AI increasingly enables people to create systems whose implementation complexity exceeds their own mental model. As the project grows, users may lose the ability to confidently answer: what have we actually built? how does this area work? why was it built this way? what is incomplete? what depends on this? what could break if I change it? what should happen next?
+
+**Differentiated hypothesis:** Universe maintains a living, understandable model of the Project so the owner does not lose understanding and control as AI performs more of the work. Do **not** position "Agents" or "AI Project Manager" alone as the primary differentiator.
+
+### Domain-neutral core vs software-first wedge
+
+**Approved:** core architecture remains **domain-neutral** (Project, Node, Decision, Task, Artifact/File concept, dependency, policy/authority, execution state). Do not prematurely replace these with software-only concepts (Repository, Backend, Frontend, Pull Request, etc.) as core schema.
+
+**Approved:** software-first applies to initial product experience, validation, example scenarios, and go-to-market — **not** a permanent restriction. Longer-term expansion to other complex project domains remains possible if the core thesis is validated.
+
+### Differentiation and validation — hypothesis
+
+The project is currently a **differentiated product hypothesis**, not proven PMF.
+
+The important validation question is **not** "Can Universe build AI agents or automate project management?" but:
+
+> Does Universe help a person understand, control, and correctly advance a complex AI-assisted project materially better than the tools they already use?
+
+A future validation prototype / UI should help a user quickly answer:
+
+1. What is this Project / area?
+2. What actually exists now?
+3. What is incomplete or unresolved?
+4. Why is it this way / what important Decisions shaped it?
+5. What does it depend on / what depends on it?
+6. What should happen next?
+7. What could be affected if I change it?
+
+Specific validation metrics and success criteria are **not finalized** in this document.
+
+A **product-validation gate** is required before committing to a large implementation roadmap beyond the Product/UX work currently underway. This does **not** silently reorder the documented implementation roadmap; roadmap sequencing changes remain a separate product-owner decision.
+
+### How this refinement relates to Product/UX v2
+
+This refinement strengthens much of the interim baseline:
+
+- **Legibility** becomes a central product differentiator, not merely a UX quality.
+- **Nodes** should help explain meaningful areas of the Project, not merely organize work.
+- **Decisions** help explain why Project state exists.
+- **Tasks** explain work done / remaining but are not the product's central abstraction.
+- **Files / Artifacts** connect understandable Project state to what exists in reality (entity semantics remain open).
+- **Dependencies / impact** help users understand consequences.
+- **Recommended Next / Project Guidance** becomes especially relevant for non-expert users.
+- **AI delegation** remains useful only if delegated work remains understandable and inspectable.
+- **Project Overview** should ultimately help users understand state and orientation quickly.
+
+Do not formalize new entity schemas from these implications.
+
+---
+
 ## 1. Product vision — Approved
 
 The product is an **AI-native project management and execution workspace** that makes complex projects clear, accessible, editable, and understandable — including for users who are not experts in the project's domain.
@@ -76,7 +158,7 @@ Idea → Understand → Structure → Plan → Decide → Tasks → Execute → 
 
 ## 2. Core user value — legibility — Approved
 
-A major product advantage is that the user can **read their project**.
+Legibility is a **central product differentiator** — not merely a UX quality. A major product advantage is that the user can **read their project**.
 
 A non-expert building software, opening a business, writing a book, planning an event, or pursuing other long-running goals should not need to repeatedly ask AI:
 
@@ -594,9 +676,15 @@ Do **not** relax this in implementation until explicitly approved. See `docs/ARC
 
 ### Decision 6 — canonical Project visualization
 
-Whether **outline / tree** becomes the canonical primary structure interface and **graph** becomes a secondary lens for relations, dependencies, and impact is **not formally approved**. Current discussion leans toward tree-canonical / graph-as-lens, but **Decision 6 remains open** until product-owner approval.
+**Decision 6 remains open.** Do not implement or document as finalized.
 
-Do not implement or document as finalized.
+Whether **outline / tree** becomes the canonical primary structure interface and **graph** becomes a secondary lens for relations, dependencies, and impact is **not formally approved**.
+
+**Approved structural truth (unchanged):** the Project has a **canonical hierarchical project structure** as project truth.
+
+**Open (Decision 6):** the primary **UI representation** of that hierarchy (Tree/Outline vs Graph role).
+
+Decision 6 should be evaluated against the refined product thesis: **which representation best helps the user understand and control a complex Project they may not be expert enough to interpret directly?**
 
 ### Terminology and branding
 
@@ -610,9 +698,13 @@ A prior architecture review recommended prioritizing Decisions and Tasks (and Fi
 
 Files / Artifacts are an approved part of the Project Workspace concept. Provenance for meaningful autonomous execution is an approved hard future requirement. **First-class Artifact entity semantics, versioning model, and generalized Run entity design remain open** — to be resolved as part of later Product/UX and roadmap work.
 
-### Validation domain
+### Validation domain and product-validation gate
 
-Which non-software domain to validate first (business, event, book, etc.) remains open.
+**Approved direction:** initial validation focuses on **AI-assisted software / digital product creation** (software-first wedge — see Product thesis).
+
+**Hypothesis — not validated:** exact ICP, commercial differentiation / PMF, exact first MVP, specific validation metrics.
+
+A **product-validation gate** is required before a large implementation roadmap commitment beyond current Product/UX work. This does not reorder the documented F–I implementation sequence.
 
 ### Global vs Project AI boundaries
 
