@@ -2,7 +2,7 @@
 
 Product and UX **interim** decision checkpoint after Stage E.1. This document records **approved product direction so far** and clearly separates it from **open decisions** and **deferred concepts**.
 
-**This checkpoint is not final Product/UX architecture approval.** Remaining Product/UX decisions (starting with **Decision 6**) must be resolved before final approval and before the UI redesign milestone.
+**This checkpoint is not final Product/UX architecture approval.** Remaining Product/UX decisions must be resolved before final approval and before the UI redesign milestone.
 
 For current implementation status see `docs/CURRENT_STATE.md`. For durable technical architecture (implemented and future) see `docs/ARCHITECTURE.md`. For product context and glossary see `docs/PROJECT.md`. For UI behavior and principles see `docs/UI.md`.
 
@@ -513,7 +513,7 @@ Deliberate child overrides survive broader parent changes and are reported simpl
 
 The **canonical hierarchical project structure** (the project hierarchy as project truth) represents currently justified Project structure.
 
-This structural invariant does not settle Decision 6: the primary UI representation of the hierarchy (Tree/Outline vs Graph role) remains open.
+**Decision 6 (approved):** Tree/Outline is the primary representation for reading, navigating, understanding, and managing the Project hierarchy; Graph/Map is a first-class view for dependencies, relations, impact, cross-branch relationships, and systemic understanding. Tree and Graph are projections of the same underlying Project state — not separate sources of truth. See §25 — Decision 6.
 
 An AI-managed area **remains visible** in canonical truth. Example:
 
@@ -669,22 +669,24 @@ Do **not** relax this in implementation until explicitly approved. See `docs/ARC
 | Autonomous structural expansion / decomposition in delegated subtrees | **Deferred** |
 | Heavy Gantt / Sprint / capacity planning | **Deferred** / not in scope |
 | Cross-project portfolio AI briefing / reasoning | **Deferred** — distinct from approved Workspace AI + User Working Model |
+| **Decision 6** — Tree/Outline vs Graph/Map roles | **Approved** — exact layouts and visual design remain open |
 
 ---
 
-## 25. Open decisions — not approved yet
+## 25. Decision 6 — canonical Project visualization — Approved
 
-### Decision 6 — canonical Project visualization
+**Status:** **Approved** by product owner.
 
-**Decision 6 remains open.** Do not implement or document as finalized.
+- The Project's **canonical hierarchical structure** remains the **structural source of truth**.
+- **Tree / Outline** is the **primary representation** for reading, navigating, understanding, and managing the Project hierarchy.
+- **Graph / Map** remains a **first-class Project view** whose primary role is dependencies, relations, impact, cross-branch relationships, and systemic understanding.
+- **Project Overview** is the normal high-level entry point for current state, orientation, attention, and eventually Recommended Next.
+- **Tree and Graph are projections of the same underlying Project state**, not separate sources of truth.
+- **Exact layouts and visual design remain open.**
 
-Whether **outline / tree** becomes the canonical primary structure interface and **graph** becomes a secondary lens for relations, dependencies, and impact is **not formally approved**.
+---
 
-**Approved structural truth (unchanged):** the Project has a **canonical hierarchical project structure** as project truth.
-
-**Open (Decision 6):** the primary **UI representation** of that hierarchy (Tree/Outline vs Graph role).
-
-Decision 6 should be evaluated against the refined product thesis: **which representation best helps the user understand and control a complex Project they may not be expert enough to interpret directly?**
+## 26. Open decisions — not approved yet
 
 ### Terminology and branding
 
@@ -716,7 +718,7 @@ UI redesign implementation and final visual design remain pending. No final layo
 
 ---
 
-## 26. Relationship to current implementation
+## 27. Relationship to current implementation
 
 **Implemented today (Stages A–E.1):**
 
@@ -742,7 +744,7 @@ See `docs/CURRENT_STATE.md` for exact commit, branch, and validation status.
 
 ---
 
-## 27. Documentation map
+## 28. Documentation map
 
 | File | Role |
 |---|---|

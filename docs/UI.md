@@ -2,7 +2,7 @@
 
 For approved Product/UX v2 principles (involvement, legibility, delegation) see `docs/PRODUCT_UX_V2.md`. This file covers visual identity, **implemented** UI behavior, and approved UX direction not yet implemented.
 
-**UI redesign implementation has not started.** Final layouts, branding, and whether tree or graph is canonical (Decision 6) remain **open**.
+**UI redesign implementation has not started.** Final layouts and branding remain **open**. **Decision 6 is approved:** Overview = current state / orientation; Tree = primary hierarchy interface; Graph = relations / dependencies / impact.
 
 ## Visual Identity
 
@@ -45,7 +45,7 @@ Avoid:
 
 The World Map is the **current** primary structure navigation surface. It uses the same shell and visual identity as Universe Home.
 
-**Open — Decision 6:** whether outline/tree becomes the canonical primary interface and graph becomes a secondary lens for relations, dependencies, and impact is **not yet approved**. Do not treat the World Map's current centrality as a permanent product decision.
+**Approved — Decision 6:** the canonical hierarchical structure remains structural source of truth. **Tree / Outline** is the primary hierarchy interface (reading, navigation, understanding, management). **Graph / Map** is a first-class view for relations, dependencies, impact, and systemic understanding. **Project Overview** is the normal high-level entry for current state and orientation. Tree and Graph project the same underlying state. Do not treat the World Map's current centrality as the final UI design — exact layouts remain open.
 
 Implemented behavior today:
 - Primary hierarchy flows from top to bottom.
@@ -235,7 +235,7 @@ The following are **approved direction** for the UI redesign. Exact layouts are 
 
 - The Project must remain readable independently of AI chat.
 - Structure grows progressively — smallest useful macro structure first; do not invent depth prematurely.
-- The canonical **hierarchical project structure** (project hierarchy as project truth) represents justified structure. Delegated areas remain visible; presentation may collapse or quiet them. This structural invariant does not settle Decision 6: the primary UI representation of the hierarchy (Tree/Outline vs Graph role) remains open.
+- The canonical **hierarchical project structure** (project hierarchy as project truth) represents justified structure. Delegated areas remain visible; presentation may collapse or quiet them. **Decision 6 (approved):** Overview = current state / orientation; Tree = primary hierarchy interface; Graph = relations / dependencies / impact. Tree and Graph are projections of the same underlying state.
 - If a focus view hides AI-managed branches, show awareness (e.g. "4 AI-managed areas hidden").
 
 ### Inspection versus involvement

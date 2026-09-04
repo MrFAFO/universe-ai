@@ -15,7 +15,7 @@ A new developer or AI conversation should start here without relying on prior ch
    - `git log --oneline --decorate --max-count=5`
 3. **Confirm** you are on `stage-e1-planning-chat-concurrency-hardening` (or a descendant branch for follow-on work).
 4. **Stage E and Stage E.1 are complete and manually accepted.** Do not regress Root/Topic Planning or E.1 concurrency invariants.
-5. **Current gate:** Product/UX Architecture v2 — **interim documentation baseline** (partial progress; **not complete**). **Refined product thesis** recorded — understanding / access / control; software-first validation wedge (hypothesis). **Next product-owner step:** **Decision 6** (evaluate against thesis: which UI best helps users understand and control a complex Project?). **Gate sequence:** remaining Product/UX decisions → final Product/UX approval → UI redesign / validation prototype → Product Validation Gate (GO / PIVOT / STOP) → major implementation. **Do not start UI redesign** until final Product/UX approval.
+5. **Current gate:** Product/UX Architecture v2 — **interim documentation baseline** (partial progress; **not complete**). **Refined product thesis** recorded — understanding / access / control; software-first validation wedge (hypothesis). **Decision 6 approved** (Tree/Outline vs Graph/Map roles). **Next Product/UX topic:** Project Guidance / Recommended Next / workflow safety. **Gate sequence:** remaining Product/UX decisions → final Product/UX approval → UI redesign / validation prototype → Product Validation Gate (GO / PIVOT / STOP) → major implementation. **UI redesign has not started.** **Do not start UI redesign** until final Product/UX approval. **Stage F remains blocked.**
 6. **Do not start Stage F** (Relations) or other major roadmap implementation until the **Product Validation Gate** is accepted (after final Product/UX approval and UI redesign / validation prototype).
 7. **Do not implement** future Decision, Task, policy-engine, or autonomy architecture until explicitly planned and approved (Decision and Task are approved future concepts — not implemented; Files/Artifacts entity semantics remain open).
 8. **Preserve** structural proposal/approval invariant and Stage D/E/E.1 technical boundaries.
@@ -37,7 +37,8 @@ A new developer or AI conversation should start here without relying on prior ch
 | **Current working branch** | `stage-e1-planning-chat-concurrency-hardening` |
 | **Stage E.1 acceptance commit** | `b7eb057` |
 | **Current checkpoint** | **Product/UX Architecture v2** — interim documentation baseline (not final Product/UX approval) |
-| **Next product-owner decision** | **Decision 6** — canonical Tree/Outline vs Graph role |
+| **Decision 6** | **Approved** — Tree/Outline vs Graph/Map roles |
+| **Next Product/UX topic** | Project Guidance / Recommended Next / workflow safety |
 | **Later gates (not started)** | Remaining Product/UX decisions → final Product/UX approval → UI redesign / validation prototype → Product Validation Gate → major implementation (Stage F blocked) |
 
 ---
@@ -45,7 +46,7 @@ A new developer or AI conversation should start here without relying on prior ch
 ## Immediate Next Task
 
 1. **Product/UX Architecture v2 — interim baseline** — this documentation checkpoint records approved direction so far in `docs/PRODUCT_UX_V2.md`. Product/UX architecture work is **not complete**.
-2. **Next product-owner decision:** **Decision 6** — canonical Tree/Outline vs Graph role (`docs/PRODUCT_UX_V2.md`).
+2. **Next Product/UX topic:** Project Guidance / Recommended Next / workflow safety (`docs/PRODUCT_UX_V2.md`). **Decision 6** (Tree/Outline vs Graph/Map roles) is **approved**.
 3. **Then:** remaining Product/UX decisions → **final Product/UX approval** → UI redesign / validation prototype → Product Validation Gate → major implementation. **Do not start UI redesign** until final Product/UX approval.
 4. **Do not start Stage F** or other major roadmap implementation until the **Product Validation Gate** is accepted.
 5. **No relation code yet.** Do not add `node_relations` writes, relation UI, or relation context injection before Stage F.
@@ -73,10 +74,11 @@ A new developer or AI conversation should start here without relying on prior ch
 - Tasks (Human/AI/Hybrid) and Decisions — approved first-class future concepts (not implemented)
 - Files / Artifacts as Project Workspace concept; provenance/recovery as hard future requirement
 - Structural proposal/approval invariant **unchanged** in current implementation
+- **Decision 6:** canonical hierarchical structure as structural truth; Tree/Outline = primary hierarchy interface; Graph/Map = relations / dependencies / impact; Project Overview = high-level entry; Tree and Graph project the same underlying state (exact layouts open)
 
 **Open product-owner decisions (not approved in this checkpoint):**
 
-- **Decision 6:** canonical Tree/Outline vs Graph role — **next product-owner decision**
+- Project Guidance / Recommended Next / workflow safety — **next Product/UX topic**
 - Terminology / rebrand (Universe, World, Root, etc.)
 - Roadmap reorder (relative priority of Decisions, Tasks, Files/Artifacts vs Relations UI — recommended, not approved)
 - Files/Artifacts first-class entity semantics and execution Run model (to be designed)
@@ -185,7 +187,8 @@ Ordered stages. Do not skip ahead. **Note:** a recommended reorder (Decisions/Ta
 | **E** | Non-root Planning | **Complete — manually accepted** (`e282d69`) |
 | **E.1** | Planning Chat Concurrency Hardening | **Complete — manually accepted** (`b7eb057`) |
 | **Product/UX v2** | Product/UX architecture (interim baseline) | **In progress** — this documentation checkpoint |
-| **—** | Decision 6 and remaining Product/UX decisions | **Next product work** — not implementation |
+| **—** | Decision 6 — Tree/Outline vs Graph/Map roles | **Approved** |
+| **—** | Project Guidance / Recommended Next / workflow safety and remaining Product/UX decisions | **Next product work** — not implementation |
 | **—** | Final Product/UX approval | **Not started** |
 | **UI redesign** | UI redesign / validation prototype | **Not started** — after final Product/UX approval |
 | **—** | Product Validation Gate | **Not started** — after UI redesign; before major implementation |
@@ -480,7 +483,8 @@ Acquisition-before-persist Planning chat runs; fenced atomic completion; HTTP 40
 
 ### Product/UX v2 (see `docs/PRODUCT_UX_V2.md`)
 
-- **Decision 6:** canonical Tree/Outline vs Graph as primary structure interface — **next product-owner decision**
+- **Decision 6:** canonical Tree/Outline vs Graph/Map roles — **approved**
+- Project Guidance / Recommended Next / workflow safety — **next Product/UX topic**
 - Terminology and branding (Universe / World / Root / Project)
 - Roadmap reorder: relative priority of Decisions, Tasks, Files/Artifacts vs Relations UI (recommended, not approved)
 - Files/Artifacts first-class entity semantics; execution Run model (open — to be designed)
